@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import config, db, ingest, pricing
+from . import config, db, doctor, ingest, pricing
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DAY_MS = 86_400_000
@@ -176,6 +176,7 @@ def health() -> JSONResponse:
             "sources": [dict(r) for r in last],
             "recent_errors": [dict(r) for r in errs],
             "unpriced_models": unpriced,
+            "deps": doctor.dependency_status(),
             "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
         }
     )

@@ -25,6 +25,11 @@ except ImportError:  # pragma: no cover
 class CodexAdapter(Adapter):
     name = "codex"
 
+    def unavailable_reason(self) -> str:
+        if self.root.exists() and zstd is None:
+            return "缺少 zstandard 依赖，运行 setup.bat 后重试"
+        return "数据源不存在"
+
     def scan(self, conn: sqlite3.Connection, force: bool = False) -> ScanResult:
         res = ScanResult()
         if not self.available():

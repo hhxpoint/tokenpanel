@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import config, db, ingest, pricing
+from . import config, db, doctor, ingest, pricing
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DAY_MS = 86_400_000
@@ -168,6 +168,7 @@ def _health() -> dict:
         "sources": sources,
         "recent_errors": errors,
         "unpriced_models": unpriced,
+        "deps": doctor.dependency_status(),
         "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
     }
 

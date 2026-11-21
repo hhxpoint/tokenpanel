@@ -163,6 +163,12 @@ def cmd_discover(args: argparse.Namespace) -> None:
         print(f"仅发现 {len(s['detected_only'])} 个：{'、'.join(s['detected_only'])}")
 
 
+def cmd_doctor(args: argparse.Namespace) -> None:
+    from . import doctor
+
+    raise SystemExit(doctor.main(quiet=args.quiet))
+
+
 def cmd_selftest(args: argparse.Namespace) -> None:
     from . import selftest
 
@@ -222,6 +228,10 @@ def main(argv: list[str] | None = None) -> None:
     p_dis = sub.add_parser("discover", help="检索本机 AI 客户端 harness")
     p_dis.add_argument("--deep", action="store_true", help="同时统计目录体积（较慢）")
     p_dis.set_defaults(func=cmd_discover)
+
+    p_doc = sub.add_parser("doctor", help="环境体检")
+    p_doc.add_argument("--quiet", action="store_true", help="只返回退出码")
+    p_doc.set_defaults(func=cmd_doctor)
 
     p_self = sub.add_parser("selftest", help="运行内建自检")
     p_self.set_defaults(func=cmd_selftest)

@@ -62,7 +62,11 @@ def run(force: bool = False, recalc_all: bool = False, include_generic: bool = T
     with db.session() as conn:
         for adapter in build(include_generic=include_generic):
             if not adapter.available():
-                summary[adapter.name] = {"status": "skipped", "reason": "数据源不存在", "events": 0}
+                summary[adapter.name] = {
+                    "status": "skipped",
+                    "reason": adapter.unavailable_reason(),
+                    "events": 0,
+                }
                 continue
             result = adapter.scan(conn, force=force)
             added = db.upsert_events(conn, result.events)

@@ -17,6 +17,7 @@
 - **零上报** — 只读本地文件，不发任何网络请求，数据不出机器
 - **零前端依赖** — 原生 JS + SVG 手绘图表，无 CDN、无构建步骤，断网可用
 - **可降级** — FastAPI 未安装时自动切换标准库 HTTP 服务，接口完全一致
+- **一键上手** — `setup.bat` 装依赖、`doctor` 体检，缺什么会明说而不是静默失败
 - **自检** — 28 项内建断言覆盖计量、解析、去重、计价，升级后可一键回归
 
 ## 支持的客户端
@@ -48,19 +49,86 @@
 
 ## 快速开始
 
-需要 Python 3.10+。
+### Windows：三步用上
+
+| 步骤 | 做什么 | 预期结果 |
+|---|---|---|
+| 1 | 双击 **`setup.bat`** | 自动检查 Python、安装 `zstandard`、跑环境体检 |
+| 2 | 双击 **`TokenPanel.vbs`** | 弹出一个无地址栏的独立窗口，自动开始扫描 |
+| 3 | 等 5–15 秒 | 看到本机所有客户端的汇总数据 |
+
+`setup.bat` 只做三件事：确认 Python ≥ 3.10、`pip install zstandard`、打印体检结果。它不会改系统环境，可以重复运行。
+
+启动脚本自己也会体检：缺 Python 会弹窗引导装，缺 `zstandard` 会问你要不要跑 `setup.bat`，不会静默失败。
+
+### 没有 Python？
+
+1. 到 https://www.python.org/downloads/ 下载 3.10 或更高版本
+2. 安装时**务必勾选 “Add Python to PATH”**
+3. 重新双击 `setup.bat`
+
+### 首次运行的预期
+
+- 首次扫描较慢（5–15 秒，取决于日志量），之后增量扫描 1–3 秒
+- 只读本地文件，不联网、不上传
+- 数据落在 `data/tokenpanel.db`，删掉会自动重建
+
+### macOS / Linux
+
+`.vbs` / `.bat` 是 Windows 专用，其他平台走命令行：
 
 ```bash
-pip install zstandard        # 解析 dsh / Codex 的 zstd 会话必需
+pip install -r requirements.txt
+python -m tokenpanel doctor      # 先体检
+python -m tokenpanel scan        # 采集
+python -m tokenpanel report      # 终端看结果
+python -m tokenpanel serve       # 浏览器打开 http://127.0.0.1:8765
 ```
 
-### 桌面客户端
+## 界面怎么看
 
-双击 **`TokenPanel.vbs`**：静默启动、自动扫描、弹出独立窗口（用 Edge/Chrome 的 `--app` 模式，无地址栏，像个原生应用）。
+| 区块 | 含义 |
+|---|---|
+| **顶部四个数字** | 所选区间内的总量、缓存命中率、平均每次调用、活跃情况 |
+| **总账条** | 输入 / 输出 / 缓存读 / 缓存写 / 推理的分项拆分 |
+| **每日用量趋势** | 按客户端堆叠的柱状图，柱子上悬停看当天明细 |
+| **客户端占比** | 各来源在所选区间内的份额与调用次数 |
+| **近 90 天活跃度** | 每格代表一天，颜色越深消耗越高，悬停看具体数值 |
+| **WorkBuddy 计费快照** | 会话级 credit 与上下文占用，**不可跨会话累加** |
+| **模型用量 / 项目用量** | 按 token 排序，快速定位哪个模型或项目在烧钱 |
+| **最近会话** | 按最近活动排序，可看出哪次会话量级异常 |
+| **数据源状态** | 每个来源的采集条数与时间；未定价模型会在这里列出 |
 
-需要看日志就用 **`TokenPanel.bat`**。想打包成单个 exe：双击 `build_exe.bat`，产物在 `dist/TokenPanel.exe`。
+右上角可在 **7 天 / 30 天 / 90 天 / 1 年 / 全部** 之间切换，也可以把计量方式从 **Token** 切到 **成本**。
 
-### 命令行
+## 故障排查
+
+| 现象 | 原因 | 解决 |
+|---|---|---|
+| 双击 vbs 没反应 | Python 不在 PATH | 跑 `setup.bat`，按提示装 Python 并勾选 Add to PATH |
+| 打开后一片空白，提示无法连接 | 服务没起来或端口被占 | 双击 `TokenPanel.bat` 看控制台报错；或 `python -m tokenpanel doctor` |
+| dsh / Codex 显示 0 条 | 缺 `zstandard` | 跑 `setup.bat`，然后点面板右上角「重新扫描」 |
+| 某个客户端完全没出现 | 本机没有这个客户端，或它不记 token | 运行 `python -m tokenpanel discover` 确认是否被识别 |
+| 金额全是「—」 | 模型不在价格表里 | 编辑 `pricing.json` 补单价，再 `scan --recalc` |
+| 数字比官方少 | 官方可能含订阅内额度或未落盘的调用 | 以面板的「未定价/未采集」提示为准，两者口径不同 |
+| 端口 8765 被占用 | 已经有一个实例在跑 | 直接双击 vbs 会复用它；或 `serve --port 8766` |
+
+## 换机器 / 备份
+
+- **要带走数据**：复制 `data/tokenpanel.db`
+- **要带走价格配置**：复制 `pricing.json`
+- **不要复制**：`__pycache__`、`dist/`、`build/`
+- 换机器后重新跑 `setup.bat` 即可，数据会自动重建（也可以手动覆盖 db）
+
+## 验证是否装好了
+
+```bash
+python -m tokenpanel doctor      # 环境体检，全绿即可用
+python -m tokenpanel selftest    # 28 项逻辑自检
+python -m tokenpanel scan        # 能打印「新增 N 条」即正常
+```
+
+## 命令行全量命令
 
 ```bash
 python -m tokenpanel discover           # 检索本机 harness
@@ -68,6 +136,7 @@ python -m tokenpanel discover --deep    # 附带各目录体积
 python -m tokenpanel scan               # 增量采集
 python -m tokenpanel scan --force --recalc    # 全量重扫 + 按新价格重算
 python -m tokenpanel report --days 30   # 终端报表
+python -m tokenpanel doctor             # 环境体检
 python -m tokenpanel selftest           # 内建自检（28 项）
 python -m tokenpanel desktop            # 桌面窗口
 python -m tokenpanel serve --port 8765  # 仅启动网页服务

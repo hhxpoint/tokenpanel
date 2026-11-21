@@ -40,6 +40,10 @@ class Adapter:
     def available(self) -> bool:
         return self.root.exists()
 
+    def unavailable_reason(self) -> str:
+        """不可用时给出准确原因，不要一律说成「不存在」。"""
+        return "数据源不存在"
+
     def scan(self, conn: sqlite3.Connection, force: bool = False) -> ScanResult:
         raise NotImplementedError
 

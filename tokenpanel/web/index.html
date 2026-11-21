@@ -231,6 +231,13 @@
     border-radius:6px;padding:2px 8px;font-size:11px;
     font-family:ui-monospace,Consolas,monospace}
   .err{color:#a8422a;font-size:11.5px;margin-top:10px;line-height:1.6;word-break:break-word}
+  .dep-warn{
+    display:flex;gap:9px;align-items:flex-start;
+    background:#fdf6e7;border:1px solid #f2e0b8;color:#845c14;
+    border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.55;margin-bottom:12px;
+  }
+  .dep-warn b{font-weight:650}
+  .dep-warn .ico{width:14px;height:14px;flex:none;margin-top:1px;opacity:.8}
   .bar-ctx{height:5px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-top:6px}
   .bar-ctx i{display:block;height:100%;background:#8b5cf6;border-radius:99px;
     animation:expand .7s var(--ease) both;transform-origin:left}
@@ -729,6 +736,16 @@ function renderWB(rows){
 
 function renderHealth(h){
   const el = $("#health");
+  const deps = h.deps || {};
+  const warn = deps.zstandard === false
+    ? `<div class="dep-warn">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 9v5M12 17.5h.01"/><path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>
+        </svg>
+        <span>未安装 <b>zstandard</b>，dsh 与 Codex 的 zstd 会话无法读取，这两路数据会缺失。
+        运行 <b>setup.bat</b> 安装后点「重新扫描」即可补齐。</span>
+      </div>`
+    : "";
   const srcs = (h.sources || []).filter(s=>s.client !== "generic");
   const rows = srcs.map(s=>{
     const fresh = s.ts && (Date.now()/1000 - s.ts < 86400*7);
@@ -744,7 +761,7 @@ function renderHealth(h){
   const errors = (h.recent_errors||[]).length
     ? `<div class="err">最近告警：${h.recent_errors.map(e=>esc(e.client + "：" + e.errors)).join("；")}</div>` : "";
 
-  el.innerHTML = rows + unpriced + errors;
+  el.innerHTML = warn + rows + unpriced + errors;
   const p = String(h.config.db || "").replace(/\\/g, "/");
   $("#dbPath").textContent = "数据库 " + p.split("/").slice(-2).join("/");
 }
