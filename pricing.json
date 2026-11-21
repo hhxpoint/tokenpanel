@@ -1,0 +1,17 @@
+{
+  "_comment": "单价单位：USD / 1M tokens。默认价格只用于估算，请按你的实际渠道/订阅改成真实值。cache_read 一般为输入价 0.1x，cache_write 约 1.25x。",
+  "_updated": "2026-11-21",
+  "models": {
+    "claude-opus": { "input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75 },
+    "claude-sonnet": { "input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75 },
+    "claude-haiku": { "input": 0.8, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0 },
+    "gpt-5": { "input": 1.25, "output": 10.0, "cache_read": 0.125, "cache_write": 1.25 },
+    "gpt-4o": { "input": 2.5, "output": 10.0, "cache_read": 1.25, "cache_write": 2.5 },
+    "deepseek-flash": { "input": 0.28, "output": 0.42, "cache_read": 0.028, "cache_write": 0.28 },
+    "deepseek-chat": { "input": 0.28, "output": 0.42, "cache_read": 0.028, "cache_write": 0.28 },
+    "deepseek-reasoner": { "input": 0.28, "output": 0.42, "cache_read": 0.028, "cache_write": 0.28 },
+    "qwen3-coder": { "input": 0.3, "output": 1.2, "cache_read": 0.03, "cache_write": 0.3 },
+    "glm-4": { "input": 0.6, "output": 2.2, "cache_read": 0.06, "cache_write": 0.6 }
+  },
+  "default": { "input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75 }
+}

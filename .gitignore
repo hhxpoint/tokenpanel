@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+*.spec
+.venv/
+venv/
+
+# 本地采集数据（可从日志重建，不入库）
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# 临时文件
+_*.png
+*.log
+.DS_Store
+Thumbs.db

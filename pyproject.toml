@@ -1,0 +1,27 @@
+[project]
+name = "tokenpanel"
+version = "0.1.0"
+description = "自动检索本机 AI 客户端并量化全部 token 用量的本地面板"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "hhxpoint" }]
+keywords = ["tokens", "llm", "usage", "dashboard", "claude", "codex", "deepseek"]
+dependencies = ["zstandard>=0.22"]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn>=0.27"]
+dev = ["pyinstaller>=6.0"]
+
+[project.scripts]
+tokenpanel = "tokenpanel.report:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tokenpanel*"]
+
+[tool.setuptools.package-data]
+tokenpanel = ["web/*.html"]
