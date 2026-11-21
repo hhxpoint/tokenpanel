@@ -10,6 +10,8 @@ jobs:
   selftest:
     name: Self-test (${{ matrix.os }} · Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
     strategy:
       fail-fast: false
       matrix:

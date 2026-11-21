@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import datetime
 
@@ -212,7 +213,17 @@ def cmd_serve(args: argparse.Namespace) -> None:
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
 
+def _force_utf8_console() -> None:
+    """Windows 控制台默认不是 UTF-8，中文和 ✓ 符号会抛 UnicodeEncodeError。"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv: list[str] | None = None) -> None:
+    _force_utf8_console()
     parser = argparse.ArgumentParser(prog="tokenpanel", description="AI 客户端 token 用量面板")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
