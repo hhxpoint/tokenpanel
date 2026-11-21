@@ -12,7 +12,7 @@ import sqlite3
 from pathlib import Path
 
 from .. import db
-from .base import Adapter, ScanResult, short_project, to_ms
+from .base import Adapter, ScanResult, iter_files, short_project, to_ms
 
 try:
     import zstandard as zstd
@@ -37,9 +37,7 @@ class DshAdapter(Adapter):
             if self.root.exists():
                 res.errors.append("缺少 zstandard 依赖，已跳过 dsh")
             return res
-        for path in sorted(self.root.rglob("*.jsonl.zst*")):
-            if path.suffix not in (".zst", ".zstd"):
-                continue
+        for path in iter_files(self.root, (".jsonl.zst", ".jsonl.zstd")):
             try:
                 stat = path.stat()
                 res.files += 1

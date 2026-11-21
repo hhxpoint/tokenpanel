@@ -125,6 +125,7 @@ def _fingerprint(path: Path) -> tuple[str, str]:
             try:
                 sample = next(d.rglob("*.jsonl"), None) or next(d.rglob("*.zst"), None)
             except (OSError, StopIteration):
+                # Python 3.10 的 rglob 在超长路径上会抛 FileNotFoundError
                 sample = None
             if sample:
                 return "jsonl_dir", f"{sub}/{sample.suffix.lstrip('.')}"

@@ -61,6 +61,11 @@
 
 启动脚本自己也会体检：缺 Python 会弹窗引导装，缺 `zstandard` 会问你要不要跑 `setup.bat`，不会静默失败。
 
+### 环境要求
+
+- Python **3.10 及以上**（已在 3.10.11 与 3.13.14 实测通过）
+- 唯一必需依赖：`zstandard`（`setup.bat` 会自动装）
+
 ### 没有 Python？
 
 1. 到 https://www.python.org/downloads/ 下载 3.10 或更高版本

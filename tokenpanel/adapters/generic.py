@@ -19,6 +19,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import os
 import re
 import sqlite3
 import time
@@ -119,23 +120,40 @@ def _iter_lines(path: Path):
 
 
 def _walk_files(root: Path, limit: int, deadline: float, recursive: bool = True):
-    """惰性遍历，随时可以因数量或时间上限中断，避免深目录卡死。"""
+    """惰性遍历，随时可因数量或时间上限中断。
+
+    用 os.walk 而不是 rglob：Python 3.10 的 rglob 遇到 Windows 超长路径会抛异常。
+    """
     count = 0
-    for pattern in ("*.jsonl", "*.jsonl.zst", "*.jsonl.gz", "*.json.gz"):
+    if not recursive:
+        try:
+            entries = list(os.scandir(root))
+        except OSError:
+            return
+        for entry in entries:
+            try:
+                if not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            if not entry.name.endswith((".jsonl", ".jsonl.zst", ".jsonl.gz", ".json.gz")):
+                continue
+            yield Path(entry.path)
+            count += 1
+            if count >= limit or time.time() > deadline:
+                return
+        return
+
+    for dirpath, _dirnames, names in os.walk(root, onerror=lambda _e: None):
         if count >= limit or time.time() > deadline:
             return
-        try:
-            iterator = root.rglob(pattern) if recursive else root.glob(pattern)
-        except OSError:
-            continue
-        try:
-            for path in iterator:
-                yield path
-                count += 1
-                if count >= limit or time.time() > deadline:
-                    return
-        except OSError:
-            continue
+        for name in names:
+            if not name.endswith((".jsonl", ".jsonl.zst", ".jsonl.gz", ".json.gz")):
+                continue
+            yield Path(dirpath) / name
+            count += 1
+            if count >= limit or time.time() > deadline:
+                return
 
 
 class GenericAdapter(Adapter):

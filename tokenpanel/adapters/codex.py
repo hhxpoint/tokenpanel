@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 
 from .. import db
-from .base import Adapter, ScanResult, parse_iso_ms, short_project
+from .base import Adapter, ScanResult, iter_files, parse_iso_ms, short_project
 
 try:
     import zstandard as zstd
@@ -34,9 +34,7 @@ class CodexAdapter(Adapter):
         res = ScanResult()
         if not self.available():
             return res
-        for path in sorted(self.root.rglob("rollout-*")):
-            if path.suffix not in (".jsonl", ".zst", ".gz"):
-                continue
+        for path in iter_files(self.root, (".jsonl", ".zst", ".gz"), prefix="rollout-"):
             try:
                 stat = path.stat()
                 res.files += 1

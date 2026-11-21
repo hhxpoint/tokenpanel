@@ -12,7 +12,7 @@ import sqlite3
 from pathlib import Path
 
 from .. import db
-from .base import Adapter, ScanResult, parse_iso_ms, short_project
+from .base import Adapter, ScanResult, iter_files, parse_iso_ms, short_project
 
 
 class ClaudeAdapter(Adapter):
@@ -22,7 +22,7 @@ class ClaudeAdapter(Adapter):
         res = ScanResult()
         if not self.available():
             return res
-        for path in sorted(self.root.rglob("*.jsonl")):
+        for path in iter_files(self.root, (".jsonl",)):
             try:
                 stat = path.stat()
                 res.files += 1

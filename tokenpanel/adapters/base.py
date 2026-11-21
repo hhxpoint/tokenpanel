@@ -10,11 +10,36 @@ adapter 不允许抛异常打断整体扫描；出错记进 errors，继续处�
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+
+def iter_files(
+    root: Path,
+    suffixes: tuple[str, ...],
+    prefix: str | None = None,
+    limit: int | None = None,
+) -> Iterator[Path]:
+    """安全遍历：单目录读取失败不中断，兼容 Windows 超长路径。
+
+    Python 3.10 的 pathlib.rglob 会在超过 260 字符的路径上抛 FileNotFoundError，
+    而 os.walk 可以通过 onerror 忽略并继续，3.10 与 3.13 行为一致。
+    """
+    count = 0
+    for dirpath, _dirnames, names in os.walk(root, onerror=lambda _e: None):
+        for name in names:
+            if prefix and not name.startswith(prefix):
+                continue
+            if not name.endswith(suffixes):
+                continue
+            yield Path(dirpath) / name
+            count += 1
+            if limit is not None and count >= limit:
+                return
 
 
 @dataclass
