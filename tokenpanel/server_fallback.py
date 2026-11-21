@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import config, db, doctor, exporter, ingest, pricing, runtime
+from . import __version__, config, db, doctor, exporter, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -168,6 +168,7 @@ def _health() -> dict:
         "sources": sources,
         "recent_errors": errors,
         "unpriced_models": unpriced,
+        "version": __version__,
         "deps": doctor.dependency_status(),
         "scan": runtime.scan_status(),
         "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
@@ -223,9 +224,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_credits())
             if path == "/api/health":
                 return self._json(_health())
+            if path == "/api/version":
+                return self._json(updater.version_info())
+            if path == "/api/update":
+                return self._json(updater.check())
             if path == "/api/export":
                 days = int_q("days", 30)
-                body = exporter.export_csv(days)
+                try:
+                    body = exporter.export_csv(days)
+                except ValueError as exc:
+                    return self._send(400, json.dumps(
+                        {"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
                 stamp = time.strftime("%Y%m%d-%H%M")
                 return self._send(
                     200, body, "text/csv; charset=utf-8",
@@ -275,7 +284,12 @@ def _watchdog() -> None:
 def serve(port: int = 8765, watch: bool = False) -> None:
     import threading
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as exc:
+        print(f"端口 {port} 无法绑定：{exc}")
+        print(f"可能已有实例在运行；如需换端口：python -m tokenpanel serve --port {port + 1}")
+        raise SystemExit(1)
     if watch:
         threading.Thread(target=_watchdog, daemon=True).start()
         print(f"面板地址: http://127.0.0.1:{port}  (标准库模式 · 窗口关闭后自动退出)")

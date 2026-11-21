@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import config, db, doctor, exporter, ingest, pricing, runtime
+from . import __version__, config, db, doctor, exporter, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -149,6 +149,16 @@ def sessions(days: int = Query(30, ge=0, le=3650), limit: int = Query(40, ge=1, 
     return JSONResponse([dict(r) for r in rows])
 
 
+@app.get("/api/version")
+def version() -> JSONResponse:
+    return JSONResponse(updater.version_info())
+
+
+@app.get("/api/update")
+def update() -> JSONResponse:
+    return JSONResponse(updater.check())
+
+
 @app.get("/api/credits")
 def credits() -> JSONResponse:
     with db.session() as conn:
@@ -176,6 +186,7 @@ def health() -> JSONResponse:
             "sources": [dict(r) for r in last],
             "recent_errors": [dict(r) for r in errs],
             "unpriced_models": unpriced,
+            "version": __version__,
             "deps": doctor.dependency_status(),
             "scan": runtime.scan_status(),
             "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
@@ -190,10 +201,14 @@ def heartbeat() -> JSONResponse:
 
 
 @app.get("/api/export")
-def export(days: int = Query(30, ge=0, le=3650)) -> Response:
+def export(days: int = Query(30, ge=0, le=3650)):
     stamp = time.strftime("%Y%m%d-%H%M")
+    try:
+        body = exporter.export_csv(days)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     return Response(
-        content=exporter.export_csv(days),
+        content=body,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="tokenpanel-{stamp}.csv"'},
     )

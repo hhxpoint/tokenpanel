@@ -186,6 +186,58 @@ def test_runtime(r: Runner) -> None:
     r.check("扫描状态结构", scan_status_shape)
 
 
+def test_updater(r: Runner) -> None:
+    from . import updater
+
+    def ordering() -> None:
+        _assert(updater.is_newer("0.1.2", "0.1.1") is True)
+        _assert(updater.is_newer("0.1.1", "0.1.1") is False)
+        _assert(updater.is_newer("0.1.0", "0.1.1") is False)
+        _assert(updater.is_newer("1.0.0", "0.9.9") is True)
+        _assert(updater.is_newer("0.10.0", "0.9.0") is True)
+
+    def offline_degrades() -> None:
+        import urllib.request
+
+        real = urllib.request.urlopen
+
+        def boom(*_a, **_k):
+            raise OSError("simulated offline")
+
+        urllib.request.urlopen = boom
+        try:
+            res = updater.check(timeout=0.1)
+        finally:
+            urllib.request.urlopen = real
+        _assert(res["checked"] is False)
+        _assert(res["has_update"] is False)
+        _assert(bool(res["error"]))
+
+    r.check("版本号比较", ordering)
+    r.check("断网时静默降级", offline_degrades)
+
+
+def test_limits(r: Runner) -> None:
+    from .exporter import export_csv
+    from .adapters.base import _tokens
+
+    def clamp() -> None:
+        _eq(_tokens(-5), 0)
+        _eq(_tokens("abc"), 0)
+        _eq(_tokens(123), 123)
+        _assert(_tokens(10**12) <= 2_000_000_000)
+
+    def csv_cap() -> None:
+        try:
+            export_csv(0, max_rows=1)
+        except ValueError:
+            return
+        raise AssertionError("超过上限时应抛 ValueError")
+
+    r.check("脏 token 值收敛", clamp)
+    r.check("导出超限报错", csv_cap)
+
+
 def _eq(actual, expected) -> None:
     if actual != expected:
         raise AssertionError(f"期望 {expected!r}，实际 {actual!r}")
@@ -217,4 +269,7 @@ def main() -> int:
     test_codex_math(r)
     print("[运行时状态]")
     test_runtime(r)
+    print("[更新与限额]")
+    test_updater(r)
+    test_limits(r)
     return r.report()

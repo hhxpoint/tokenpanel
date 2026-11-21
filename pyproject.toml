@@ -1,6 +1,6 @@
 [project]
 name = "tokenpanel"
-version = "0.1.1"
+version = "0.1.2"
 description = "自动检索本机 AI 客户端并量化全部 token 用量的本地面板"
 readme = "README.md"
 requires-python = ">=3.10"

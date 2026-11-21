@@ -56,6 +56,20 @@ class ScanResult:
         self.errors.extend(other.errors)
 
 
+MAX_TOKENS_PER_CALL = 2_000_000_000  # 单次调用不可能超过此量级，超出视为脏数据
+
+
+def _tokens(value) -> int:
+    """把任意输入收敛成非负整数，避免脏数据把统计带偏。"""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 0
+    if n <= 0:
+        return 0
+    return min(n, MAX_TOKENS_PER_CALL)
+
+
 class Adapter:
     name = "base"
 
@@ -97,11 +111,11 @@ class Adapter:
             int(ts_ms),
             project,
             model,
-            int(input_tokens),
-            int(output_tokens),
-            int(cache_read),
-            int(cache_write),
-            int(reasoning),
+            _tokens(input_tokens),
+            _tokens(output_tokens),
+            _tokens(cache_read),
+            _tokens(cache_write),
+            _tokens(reasoning),
             cost_usd,  # 源端自带成本时直接写入，None 则由 pricing 回算
             "native" if cost_usd is not None else None,
             precision,
