@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import config, db, doctor, ingest, pricing
+from . import config, db, doctor, exporter, ingest, pricing, runtime
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -169,6 +169,7 @@ def _health() -> dict:
         "recent_errors": errors,
         "unpriced_models": unpriced,
         "deps": doctor.dependency_status(),
+        "scan": runtime.scan_status(),
         "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
     }
 
@@ -179,11 +180,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 静默默认访问日志
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str = "application/json; charset=utf-8") -> None:
+    def _send(self, code: int, body: bytes, ctype: str = "application/json; charset=utf-8",
+              extra: dict | None = None) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -219,24 +223,64 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_credits())
             if path == "/api/health":
                 return self._json(_health())
+            if path == "/api/export":
+                days = int_q("days", 30)
+                body = exporter.export_csv(days)
+                stamp = time.strftime("%Y%m%d-%H%M")
+                return self._send(
+                    200, body, "text/csv; charset=utf-8",
+                    {"Content-Disposition": f'attachment; filename="tokenpanel-{stamp}.csv"'},
+                )
             self._send(404, b'{"error":"not found"}')
         except Exception as exc:  # 服务不因单请求异常退出
             self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if parsed.path == "/api/heartbeat":
+            runtime.beat()
+            return self._json({"ok": True})
         if parsed.path == "/api/scan":
             force = parse_qs(parsed.query).get("force", ["false"])[0].lower() in ("1", "true", "yes")
+            # 同步执行：面板需要立即知道结果，扫描通常 1–15 秒
             try:
-                return self._json(ingest.run(force=force))
+                runtime.scan_started()
+                result = ingest.run(force=force)
+                added = sum(v.get("added", 0) for v in result["sources"].values())
+                runtime.scan_finished(added)
+                return self._json(result)
             except Exception as exc:
+                runtime.scan_finished(0, str(exc))
                 return self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
         self._send(404, b'{"error":"not found"}')
 
 
-def serve(port: int = 8765) -> None:
+def _watchdog() -> None:
+    """desktop 模式下：页面关闭、心跳停止后自动退出进程。
+
+    首次心跳到达前不判定（浏览器可能启动较慢）；
+    一旦收到过心跳，就按超时窗口判断，避免关窗后残留进程。
+    """
+    import os
+
+    deadline = time.time() + 45
+    while not runtime.BEAT["seen"] and time.time() < deadline:
+        time.sleep(1)
+    while True:
+        time.sleep(3)
+        if runtime.should_exit():
+            os._exit(0)
+
+
+def serve(port: int = 8765, watch: bool = False) -> None:
+    import threading
+
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"面板地址: http://127.0.0.1:{port}  (标准库模式)")
+    if watch:
+        threading.Thread(target=_watchdog, daemon=True).start()
+        print(f"面板地址: http://127.0.0.1:{port}  (标准库模式 · 窗口关闭后自动退出)")
+    else:
+        print(f"面板地址: http://127.0.0.1:{port}  (标准库模式)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

@@ -78,7 +78,7 @@
     display:inline-flex;align-items:center;gap:7px;
     border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
     font:inherit;font-size:12.5px;font-weight:520;padding:7px 13px;border-radius:10px;
-    cursor:pointer;box-shadow:var(--shadow-sm);
+    cursor:pointer;box-shadow:var(--shadow-sm);text-decoration:none;
     transition:transform .18s var(--ease), box-shadow .18s, border-color .18s;
   }
   .btn:hover{border-color:rgba(24,22,19,.22);box-shadow:var(--shadow-md);transform:translateY(-1px)}
@@ -115,6 +115,17 @@
   .kpi .val small{font-size:15px;font-weight:600;letter-spacing:-.3px;margin-left:1px;opacity:.85}
   .kpi .sub{color:var(--muted);font-size:11.5px;line-height:1.45}
   .kpi .sub b{color:var(--text-2);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .scan-hint{
+    display:flex;align-items:center;gap:9px;
+    background:#eef4ff;border:1px solid #d7e3fb;color:#2c4a8a;
+    border-radius:10px;padding:9px 14px;font-size:12.5px;margin:6px 0 12px;
+  }
+  .scan-hint .spin{
+    width:12px;height:12px;flex:none;border-radius:50%;
+    border:2px solid #b9cdf5;border-top-color:#3b6bd6;
+    animation:spin .8s linear infinite;
+  }
 
   /* ---------- 总账条 ---------- */
   .ledger{
@@ -312,6 +323,12 @@
       <button data-mode="tokens" class="on">Token</button>
       <button data-mode="cost">成本</button>
     </div>
+    <a class="btn" id="exportBtn" href="/api/export?days=7" download title="导出为 CSV，Excel 可直接打开">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 19h16"/>
+      </svg>
+      导出
+    </a>
     <button class="btn" id="refresh" title="重新扫描本机数据">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
@@ -319,6 +336,10 @@
       重新扫描
     </button>
   </header>
+
+  <div class="scan-hint" id="scanHint" hidden>
+    <span class="spin"></span><span class="txt">正在扫描本机数据…</span>
+  </div>
 
   <section class="kpis" id="kpis" aria-label="汇总指标"></section>
   <div class="ledger rise d1" id="ledger"></div>
@@ -766,6 +787,39 @@ function renderHealth(h){
   $("#dbPath").textContent = "数据库 " + p.split("/").slice(-2).join("/");
 }
 
+/* ---------- 扫描状态跟随 ---------- */
+let scanPoll = null;
+
+function syncExport(days){
+  const el = $("#exportBtn");
+  if (el) el.href = `/api/export?days=${days}`;
+}
+
+function followScan(hl){
+  const hint = $("#scanHint");
+  const running = !!(hl.scan && hl.scan.running);
+  if (running){
+    hint.hidden = false;
+    if (!scanPoll) scanPoll = setInterval(checkScan, 2000);
+  } else {
+    hint.hidden = true;
+    if (scanPoll){ clearInterval(scanPoll); scanPoll = null; }
+  }
+}
+
+async function checkScan(){
+  try{
+    const h = await getJSON("/api/health");
+    if (!h.scan || !h.scan.running){
+      if (scanPoll){ clearInterval(scanPoll); scanPoll = null; }
+      $("#scanHint").hidden = true;
+      const added = (h.scan && h.scan.added) || 0;
+      toast(added > 0 ? `扫描完成，新增 ${added} 条记录` : "扫描完成");
+      load();
+    }
+  }catch(_){ /* 服务重启中，下一轮再试 */ }
+}
+
 function emptyState(msg){
   return `<div class="empty">${ICONS.empty}${esc(msg)}</div>`;
 }
@@ -794,6 +848,7 @@ async function load(){
     renderKpis(ov); renderLedger(ov); renderTrend(tr); renderShare(ov);
     renderHeat(tr90); renderModels(md); renderProjects(pj);
     renderSessions(ss); renderWB(cr); renderHealth(hl);
+    followScan(hl); syncExport(d);
     $("#kpis").dataset.ready = "1";
     $("#builtTime").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN",{hour12:false});
   }catch(err){
@@ -850,6 +905,14 @@ document.addEventListener("visibilitychange", ()=>{
   if (document.hidden){ lastHidden = Date.now(); }
   else if (Date.now() - lastHidden > 60000){ load(); }
 });
+
+/* 心跳：让服务知道窗口还开着；关闭后服务会自动退出 */
+(function heartbeat(){
+  const ping = () => fetch("/api/heartbeat", {method:"POST"}).catch(()=>{});
+  ping();
+  setInterval(ping, 20000);
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) ping(); });
+})();
 
 load();
 </script>

@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import config, db, doctor, ingest, pricing
+from . import config, db, doctor, exporter, ingest, pricing, runtime
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -177,11 +177,36 @@ def health() -> JSONResponse:
             "recent_errors": [dict(r) for r in errs],
             "unpriced_models": unpriced,
             "deps": doctor.dependency_status(),
+            "scan": runtime.scan_status(),
             "config": {"db": str(config.DB_PATH), "pricing": str(config.PRICING_PATH)},
         }
     )
 
 
+@app.post("/api/heartbeat")
+def heartbeat() -> JSONResponse:
+    runtime.beat()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/export")
+def export(days: int = Query(30, ge=0, le=3650)) -> Response:
+    stamp = time.strftime("%Y%m%d-%H%M")
+    return Response(
+        content=exporter.export_csv(days),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="tokenpanel-{stamp}.csv"'},
+    )
+
+
 @app.post("/api/scan")
 def scan(force: bool = False) -> JSONResponse:
-    return JSONResponse(ingest.run(force=force))
+    runtime.scan_started()
+    try:
+        result = ingest.run(force=force)
+        added = sum(v.get("added", 0) for v in result["sources"].values())
+        runtime.scan_finished(added)
+        return JSONResponse(result)
+    except Exception as exc:
+        runtime.scan_finished(0, str(exc))
+        return JSONResponse({"error": str(exc)}, status_code=500)

@@ -156,6 +156,36 @@ def test_codex_math(r: Runner) -> None:
     r.check("Codex 净输入计算", calc)
 
 
+def test_runtime(r: Runner) -> None:
+    from . import runtime
+
+    def no_beat_no_exit() -> None:
+        runtime.BEAT.update(ts=0.0, seen=False)
+        _assert(runtime.should_exit() is False)
+
+    def fresh_beat_stays() -> None:
+        runtime.beat()
+        _assert(runtime.should_exit() is False)
+
+    def stale_beat_exits() -> None:
+        runtime.BEAT["ts"] = 0.0  # 模拟窗口关闭已久
+        runtime.BEAT["seen"] = True
+        _assert(runtime.should_exit() is True)
+
+    def scan_status_shape() -> None:
+        runtime.scan_started()
+        st = runtime.scan_status()
+        _assert(st["running"] is True)
+        runtime.scan_finished(7)
+        st = runtime.scan_status()
+        _assert(st["running"] is False and st["added"] == 7)
+
+    r.check("无心跳不退出", no_beat_no_exit)
+    r.check("心跳新鲜不退出", fresh_beat_stays)
+    r.check("心跳过期退出", stale_beat_exits)
+    r.check("扫描状态结构", scan_status_shape)
+
+
 def _eq(actual, expected) -> None:
     if actual != expected:
         raise AssertionError(f"期望 {expected!r}，实际 {actual!r}")
@@ -185,4 +215,6 @@ def main() -> int:
     test_db(r)
     print("[边界算法]")
     test_codex_math(r)
+    print("[运行时状态]")
+    test_runtime(r)
     return r.report()

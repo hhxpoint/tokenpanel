@@ -20,7 +20,7 @@ import time
 import webbrowser
 from pathlib import Path
 
-from . import config, ingest
+from . import config, ingest, runtime
 
 # PyInstaller 的 --windowed 模式下 stdout 为 None，任何 print 都会抛 AttributeError。
 # 这里兜底到 devnull，保证无控制台打包也能安全运行。
@@ -98,40 +98,63 @@ def open_window(url: str, width: int = 1440, height: int = 940) -> bool:
     return False
 
 
+def _background_scan() -> None:
+    try:
+        result = ingest.run()
+        added = sum(v.get("added", 0) for v in result["sources"].values())
+        runtime.scan_finished(added)
+        print(f"扫描完成：新增 {added} 条，用时 {result['elapsed_ms']} ms")
+    except Exception as exc:  # 后台扫描失败不影响面板使用
+        runtime.scan_finished(0, str(exc))
+        print(f"扫描失败：{exc}")
+
+
+def _watch_for_close() -> None:
+    """窗口关闭后前端不再发心跳，进程自行退出，不留僵尸占用端口。"""
+    # 给页面加载留出时间；从未收到心跳说明浏览器没打开，此时保持常驻
+    deadline = time.time() + 40
+    while time.time() < deadline and not runtime.BEAT["seen"]:
+        time.sleep(0.5)
+    while True:
+        time.sleep(5)
+        if runtime.should_exit():
+            print("窗口已关闭，退出。")
+            os._exit(0)
+
+
 def run(port: int = 8765, rescan: bool = True) -> None:
+    config.ensure_dirs()
     url = f"http://127.0.0.1:{port}"
 
     if _port_open(port):
-        # 已有实例在跑，直接开窗口
+        # 已有实例在跑：打开窗口即可，本进程不必常驻
         if not open_window(url):
             webbrowser.open(url)
         return
 
-    if rescan:
-        try:
-            result = ingest.run()
-            added = sum(v.get("added", 0) for v in result["sources"].values())
-            print(f"扫描完成：新增 {added} 条事件，用时 {result['elapsed_ms']} ms")
-        except Exception as exc:  # 扫描失败不阻止面板启动
-            print(f"扫描失败，仍启动面板：{exc}")
-
     from . import server_fallback
 
-    threading.Thread(target=server_fallback.serve, args=(port,), daemon=True).start()
+    def _serve() -> None:
+        try:
+            server_fallback.serve(port, watch=True)
+        except OSError:
+            # 并发双击时端口可能被另一个实例抢占，忽略即可
+            pass
+
+    threading.Thread(target=_serve, daemon=True).start()
 
     if not _wait_port(port):
         print("服务启动失败，请检查端口是否被占用。")
         sys.exit(1)
 
-    if open_window(url):
-        print(f"已打开客户端窗口：{url}")
-    else:
+    # 先开窗口（页面显示骨架屏），扫描放到后台，避免用户干等
+    if not open_window(url):
         print(f"未找到 Edge/Chrome，改用默认浏览器：{url}")
         webbrowser.open(url)
 
-    # 保持进程存活，窗口关闭后随服务一起退出
-    try:
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
+    if rescan:
+        # 先置为扫描中，页面首屏就能看到提示，而不是一片空白
+        runtime.scan_started()
+        threading.Thread(target=_background_scan, daemon=True).start()
+
+    _watch_for_close()
