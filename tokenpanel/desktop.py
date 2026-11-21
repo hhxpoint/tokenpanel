@@ -28,6 +28,11 @@ if sys.stdout is None:
     sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
 if sys.stderr is None:
     sys.stderr = sys.stdout
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 APP_TITLE = "TokenPanel"
 
