@@ -147,14 +147,16 @@ def run(port: int = 8765, rescan: bool = True) -> None:
         print("服务启动失败，请检查端口是否被占用。")
         sys.exit(1)
 
+    # 必须在开窗口之前置位：页面首屏才会显示「正在扫描」，而不是一片空白
+    if rescan:
+        runtime.scan_started()
+
     # 先开窗口（页面显示骨架屏），扫描放到后台，避免用户干等
     if not open_window(url):
         print(f"未找到 Edge/Chrome，改用默认浏览器：{url}")
         webbrowser.open(url)
 
     if rescan:
-        # 先置为扫描中，页面首屏就能看到提示，而不是一片空白
-        runtime.scan_started()
         threading.Thread(target=_background_scan, daemon=True).start()
 
     _watch_for_close()
