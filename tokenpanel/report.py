@@ -24,6 +24,15 @@ DISPLAY = {
 }
 
 
+def display_name(client: str) -> str:
+    """把内部标识转成可读名称，通用探测器显示为「通用·来源」。"""
+    if client in DISPLAY:
+        return DISPLAY[client]
+    if client.startswith("generic:"):
+        return "通用·" + client[8:]
+    return client
+
+
 def human(n: float | int | None) -> str:
     """中文计数单位：万 / 亿 / 万亿。"""
     n = float(n or 0)
@@ -83,7 +92,7 @@ def cmd_report(args: argparse.Namespace) -> None:
             sum_cw += r["cache_write"] or 0
             sum_re += r["reasoning"] or 0
             print(
-                f"{DISPLAY.get(r['client'], r['client']):<12}{r['calls']:>7}"
+                f"{display_name(r['client']):<12}{r['calls']:>7}"
                 f"{human(r['input']):>9}{human(r['output']):>9}"
                 f"{human(r['cache_read']):>9}{human(r['cache_write']):>9}"
                 f"{human(total):>9}{usd(r['cost_usd']):>11}"
@@ -99,14 +108,14 @@ def cmd_report(args: argparse.Namespace) -> None:
         if models:
             print(f"\n=== 近 {args.days} 天按模型 ===")
             for r in models[:12]:
-                print(f"  {DISPLAY.get(r['client'], r['client']):<12}{str(r['model'])[:36]:<38}"
+                print(f"  {display_name(r['client']):<12}{str(r['model'])[:36]:<38}"
                       f"{human(r['tokens']):>9}{usd(r['cost_usd']):>11}")
 
         projects = db.by_project(conn, since, limit=10)
         if projects:
             print(f"\n=== 近 {args.days} 天按项目 ===")
             for r in projects:
-                print(f"  {DISPLAY.get(r['client'], r['client']):<12}{str(r['project'])[:36]:<38}"
+                print(f"  {display_name(r['client']):<12}{str(r['project'])[:36]:<38}"
                       f"{human(r['tokens']):>9}{usd(r['cost_usd']):>11}")
 
         credits = db.credit_rows(conn)
@@ -152,6 +161,12 @@ def cmd_discover(args: argparse.Namespace) -> None:
     print(f"\n可量化 {len(s['supported'])} 个：{'、'.join(s['supported']) or '无'}")
     if s["detected_only"]:
         print(f"仅发现 {len(s['detected_only'])} 个：{'、'.join(s['detected_only'])}")
+
+
+def cmd_selftest(args: argparse.Namespace) -> None:
+    from . import selftest
+
+    raise SystemExit(selftest.main())
 
 
 def cmd_desktop(args: argparse.Namespace) -> None:
@@ -207,6 +222,9 @@ def main(argv: list[str] | None = None) -> None:
     p_dis = sub.add_parser("discover", help="检索本机 AI 客户端 harness")
     p_dis.add_argument("--deep", action="store_true", help="同时统计目录体积（较慢）")
     p_dis.set_defaults(func=cmd_discover)
+
+    p_self = sub.add_parser("selftest", help="运行内建自检")
+    p_self.set_defaults(func=cmd_selftest)
 
     p_desk = sub.add_parser("desktop", help="以桌面客户端窗口启动")
     p_desk.add_argument("--port", type=int, default=8765)

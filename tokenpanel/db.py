@@ -139,6 +139,7 @@ def mark_file(conn: sqlite3.Connection, path: str, client: str, mtime: float, si
         """INSERT INTO source_file (path, client, mtime, size, last_scan, events)
            VALUES (?,?,?,?,?,?)
            ON CONFLICT(path) DO UPDATE SET
+             client=excluded.client,
              mtime=excluded.mtime, size=excluded.size,
              last_scan=excluded.last_scan, events=excluded.events""",
         (path, client, mtime, size, int(time.time()), events),

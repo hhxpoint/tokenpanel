@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 HOME = Path.home()
 APPDATA = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
 LOCALAPPDATA = Path(os.environ.get("LOCALAPPDATA", HOME / "AppData" / "Local"))
+APP_SUPPORT = HOME / "Library" / "Application Support"  # macOS
+XDG_CONFIG = HOME / ".config"                           # Linux
+XDG_DATA = HOME / ".local" / "share"
 
 # 名字关键词 → 客户端标识。用于在 AppData 里认出目标。
 NAME_HINTS: dict[str, str] = {
@@ -52,7 +56,7 @@ SUPPORTED = {"claude", "codex", "dsh", "opencode", "workbuddy"}
 
 # 已知无法在本地拿到逐次 token 的客户端及原因，用于给出准确解释。
 UNSUPPORTED_REASON = {
-    "qoder": "会话日志缺少 usage 字段，只能在 Qoder 后台查看",
+    "qoder": "部分会话含 usage 字段，已由通用探测器自动纳入；其余需在 Qoder 后台查看",
     "trae": "用量在云端，本地仅缓存配置",
     "cursor": "用量在云端 Dashboard",
     "windsurf": "用量在云端 Dashboard",
@@ -172,17 +176,31 @@ def _match_hint(name: str) -> str | None:
     return None
 
 
-# 明确登记的已知位置：(客户端, 路径, 类型, 证据描述)
-# 这些位置已人工验证过，不靠猜测，避免目录结构差异导致判定失败。
-KNOWN_PATHS: list[tuple[str, Path, str, str]] = [
-    ("claude", HOME / ".claude" / "projects", "jsonl_dir", "projects/<项目>/<会话>.jsonl"),
-    ("codex", HOME / ".codex" / "sessions", "jsonl_dir", "sessions/日期/rollout-*.jsonl.zst"),
-    ("dsh", HOME / ".dsh" / "sessions", "jsonl_dir", "sessions/<项目>/<会话>/session.v4.jsonl.zstd"),
-    ("opencode", HOME / ".local" / "share" / "opencode", "sqlite", "opencode.db 含 tokens/cost"),
-    ("workbuddy", HOME / ".workbuddy", "sqlite", "workbuddy.db → session_usage"),
-    ("qoder", HOME / ".qoder", "jsonl_dir", "projects/*.jsonl（无 usage 字段）"),
-    ("trae", APPDATA / "Trae", "log_dir", "仅配置与缓存"),
-]
+def known_paths() -> list[tuple[str, Path, str, str]]:
+    """跨平台的已知位置。返回 (客户端, 路径, 类型, 证据)。"""
+    items: list[tuple[str, Path, str, str]] = [
+        ("claude", HOME / ".claude" / "projects", "jsonl_dir", "projects/<项目>/<会话>.jsonl"),
+        ("codex", HOME / ".codex" / "sessions", "jsonl_dir", "sessions/日期/rollout-*.jsonl.zst"),
+        ("dsh", HOME / ".dsh" / "sessions", "jsonl_dir", "sessions/<项目>/<会话>/session.v4.jsonl.zstd"),
+        ("opencode", XDG_DATA / "opencode", "sqlite", "opencode.db 含 tokens/cost"),
+        ("workbuddy", HOME / ".workbuddy", "sqlite", "workbuddy.db → session_usage"),
+        ("qoder", HOME / ".qoder" / "projects", "jsonl_dir", "projects/*.jsonl（无 usage 字段）"),
+        ("gemini", HOME / ".gemini", "unknown", "Gemini CLI 数据目录"),
+    ]
+    if sys.platform == "win32":
+        items.append(("trae", APPDATA / "Trae", "log_dir", "仅配置与缓存"))
+    elif sys.platform == "darwin":
+        for client, rel in (
+            ("trae", "Trae"),
+            ("cursor", "Cursor"),
+            ("windsurf", "Windsurf"),
+            ("claude", "Claude"),
+        ):
+            items.append((client, APP_SUPPORT / rel, "unknown", "macOS 应用数据"))
+    else:
+        for client, rel in (("cursor", "Cursor"), ("windsurf", "Windsurf")):
+            items.append((client, XDG_CONFIG / rel, "unknown", "Linux 配置目录"))
+    return items
 
 
 def discover(deep: bool = False) -> list[Harness]:
@@ -190,8 +208,10 @@ def discover(deep: bool = False) -> list[Harness]:
     found: dict[str, Harness] = {}
 
     # 1. 已知位置
-    for client, path, kind, evidence in KNOWN_PATHS:
+    for client, path, kind, evidence in known_paths():
         if not path.exists():
+            continue
+        if client in found:
             continue
         found[client] = Harness(
             client=client,
@@ -203,8 +223,11 @@ def discover(deep: bool = False) -> list[Harness]:
             note="" if client in SUPPORTED else UNSUPPORTED_REASON.get(client, "暂无对应采集器"),
         )
 
-    # 2. 一级目录扫描（HOME 下的点目录 + AppData 两个根）
-    roots = [HOME, APPDATA, LOCALAPPDATA]
+    # 2. 一级目录扫描（HOME 下的点目录 + 各平台的应用数据根）
+    roots = [HOME]
+    for extra_root in (APPDATA, LOCALAPPDATA, APP_SUPPORT, XDG_CONFIG, XDG_DATA):
+        if extra_root.exists() and extra_root != HOME:
+            roots.append(extra_root)
     for root in roots:
         if not root.exists():
             continue
@@ -232,34 +255,36 @@ def discover(deep: bool = False) -> list[Harness]:
                 note=UNSUPPORTED_REASON.get(client, "检测到目录，但未确认 token 字段"),
             )
 
-    # 3. VS Code / Cursor 系扩展的 globalStorage
-    for editor in ("Code", "Cursor", "Trae", "Windsurf", "Code - Insiders"):
-        gs = APPDATA / editor / "User" / "globalStorage"
-        if not gs.is_dir():
-            continue
-        try:
-            exts = [p for p in gs.iterdir() if p.is_dir()]
-        except OSError:
-            continue
-        for ext in exts:
-            client = _match_hint(ext.name)
-            if not client:
+    # 3. VS Code / Cursor 系扩展的 globalStorage（按平台选取应用数据根）
+    bases = [p for p in (APPDATA, APP_SUPPORT, XDG_CONFIG) if p.exists()]
+    for base in bases:
+        for editor in ("Code", "Cursor", "Trae", "Windsurf", "Code - Insiders"):
+            gs = base / editor / "User" / "globalStorage"
+            if not gs.is_dir():
                 continue
-            if client in found:
-                # 已由更权威的位置收录，仅补充说明
-                if "扩展" not in found[client].evidence:
-                    found[client].evidence += f" · 另有 {editor} 扩展"
+            try:
+                exts = [p for p in gs.iterdir() if p.is_dir()]
+            except OSError:
                 continue
-            kind, evidence = _fingerprint(ext)
-            found[client] = Harness(
-                client=client,
-                path=str(ext),
-                supported=False,
-                kind=kind,
-                size_mb=_dir_size_mb(ext) if deep else 0.0,
-                evidence=f"{editor} 扩展 · {evidence}" if evidence else f"{editor} 扩展",
-                note=UNSUPPORTED_REASON.get(client, "扩展数据中未发现 token 字段"),
-            )
+            for ext in exts:
+                client = _match_hint(ext.name)
+                if not client:
+                    continue
+                if client in found:
+                    # 已由更权威的位置收录，仅补充说明
+                    if "扩展" not in found[client].evidence:
+                        found[client].evidence += f" · 另有 {editor} 扩展"
+                    continue
+                kind, evidence = _fingerprint(ext)
+                found[client] = Harness(
+                    client=client,
+                    path=str(ext),
+                    supported=False,
+                    kind=kind,
+                    size_mb=_dir_size_mb(ext) if deep else 0.0,
+                    evidence=f"{editor} 扩展 · {evidence}" if evidence else f"{editor} 扩展",
+                    note=UNSUPPORTED_REASON.get(client, "扩展数据中未发现 token 字段"),
+                )
 
     items = list(found.values())
     items.sort(key=lambda h: (not h.supported, h.client))

@@ -27,6 +27,9 @@ SOURCES = {
 # 全量重扫的阈值：单文件超过这个大小就跳过（防止误读巨大文件卡死）。
 MAX_FILE_BYTES = int(os.environ.get("TP_MAX_FILE_BYTES", 512 * 1024 * 1024))
 
+# 关闭通用探测器（只用专用 adapter）。设置 TP_DISABLE_GENERIC=1 生效。
+DISABLE_GENERIC = os.environ.get("TP_DISABLE_GENERIC", "").strip().lower() in ("1", "true", "yes")
+
 
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
