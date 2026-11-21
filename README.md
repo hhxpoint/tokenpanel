@@ -8,6 +8,20 @@
 
 ---
 
+## 直接下载（无需安装 Python）
+
+**[⬇ 下载 TokenPanel.exe](https://github.com/hhxpoint/tokenpanel/releases/latest)**
+
+双击就能用，5–15 秒后看到本机所有 AI 客户端的用量。
+
+- 单文件，内置 Python 运行时与全部依赖，不写注册表、不改系统环境
+- 数据保存在 exe 同目录的 `data\` 下，整个文件夹可以拷到 U 盘带走
+- 系统要求：Windows 10/11 x64
+
+> 源码运行方式见下方「从源码运行」，适合想改代码或做二次开发的人。
+
+---
+
 ## 特性
 
 - **自动发现** — 扫描 `~`、`AppData`、`~/.config`、`~/Library/Application Support`，按目录结构与文件指纹识别 harness，不依赖写死的清单
@@ -47,7 +61,7 @@
 
 > 估算出来的假数字比没有数字更糟。宁可显示「不做」，也不猜。
 
-## 快速开始
+## 从源码运行
 
 ### Windows：三步用上
 

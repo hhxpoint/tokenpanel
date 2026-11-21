@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import config, db, doctor, ingest, pricing
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
 
 

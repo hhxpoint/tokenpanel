@@ -22,6 +22,13 @@ from pathlib import Path
 
 from . import config, ingest
 
+# PyInstaller 的 --windowed 模式下 stdout 为 None，任何 print 都会抛 AttributeError。
+# 这里兜底到 devnull，保证无控制台打包也能安全运行。
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+if sys.stderr is None:
+    sys.stderr = sys.stdout
+
 APP_TITLE = "TokenPanel"
 
 
