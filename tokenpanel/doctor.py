@@ -80,6 +80,13 @@ def _check_port(port: int = 8765) -> tuple[bool, str, str]:
     return True, f"{port} 空闲", ""
 
 
+def _check_writable() -> tuple[bool, str, str]:
+    ok, err = config.is_writable()
+    if ok:
+        return True, str(config.DATA_DIR), ""
+    return False, "目录不可写", f"{err}；请把程序移到桌面或文档等可写目录"
+
+
 def _check_data() -> tuple[bool, str, str]:
     db = config.DB_PATH
     if not db.exists():
@@ -153,6 +160,10 @@ def run(quiet: bool = False) -> int:
     section("运行状态")
     port_ok, port_detail, port_advice = _check_port()
     emit(OK, "端口", port_detail, port_advice)
+    wr_ok, wr_detail, wr_advice = _check_writable()
+    emit(OK if wr_ok else BAD, "数据目录", wr_detail, wr_advice, required=True)
+    if not wr_ok and quiet:
+        problems.append("数据目录不可写")
     data_ok, data_detail, data_advice = _check_data()
     emit(OK if data_ok else BAD, "数据", data_detail, data_advice)
 

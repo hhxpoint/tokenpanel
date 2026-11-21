@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -55,8 +56,16 @@ def build(include_generic: bool = True) -> list[Adapter]:
     return adapters
 
 
+_RUN_LOCK = threading.Lock()
+
+
 def run(force: bool = False, recalc_all: bool = False, include_generic: bool = True) -> dict:
-    """执行一次完整采集。返回每个 adapter 的结果摘要。"""
+    """执行一次完整采集（进程内串行，避免并发扫描互相干扰）。"""
+    with _RUN_LOCK:
+        return _run_locked(force=force, recalc_all=recalc_all, include_generic=include_generic)
+
+
+def _run_locked(force: bool = False, recalc_all: bool = False, include_generic: bool = True) -> dict:
     started = time.time()
     summary: dict[str, dict] = {}
     with db.session() as conn:

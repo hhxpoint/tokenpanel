@@ -74,14 +74,54 @@ CREATE TABLE IF NOT EXISTS scan_log (
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
+    """打开数据库；文件损坏时隔离并重建，避免用户直接卡死。"""
+    target = Path(path or config.DB_PATH)
+    try:
+        return _open(target)
+    except sqlite3.DatabaseError:
+        quarantine(target)
+        return _open(target)
+
+
+def _open(target: Path) -> sqlite3.Connection:
     config.ensure_dirs()
-    conn = sqlite3.connect(path or config.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.executescript(SCHEMA)
-    _migrate(conn)
-    return conn
+    conn = sqlite3.connect(target)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=8000")  # 多进程并发时等待而不是立刻失败
+        conn.executescript(SCHEMA)
+        _migrate(conn)
+        return conn
+    except Exception:
+        # 必须释放句柄，否则后面无法改名隔离损坏文件
+        conn.close()
+        raise
+
+
+def quarantine(target: Path) -> Path | None:
+    """把损坏的库改名保留（便于排查），并清掉 wal/shm。"""
+    if not target.exists():
+        return None
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    dest = target.with_name(f"{target.stem}.corrupt-{stamp}{target.suffix}")
+    try:
+        target.rename(dest)
+    except OSError:
+        try:
+            target.unlink()
+        except OSError:
+            return None
+        dest = None
+    for suffix in ("-wal", "-shm"):
+        side = Path(str(target) + suffix)
+        if side.exists():
+            try:
+                side.unlink()
+            except OSError:
+                pass
+    return dest
 
 
 def _migrate(conn: sqlite3.Connection) -> None:

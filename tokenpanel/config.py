@@ -49,6 +49,18 @@ MAX_FILE_BYTES = int(os.environ.get("TP_MAX_FILE_BYTES", 512 * 1024 * 1024))
 DISABLE_GENERIC = os.environ.get("TP_DISABLE_GENERIC", "").strip().lower() in ("1", "true", "yes")
 
 
+def is_writable() -> tuple[bool, str]:
+    """真实写入探测。os.access 在 Windows 上不可靠，必须实际落盘一次。"""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        probe = DATA_DIR / ".write-probe"
+        probe.write_bytes(b"ok")
+        probe.unlink()
+        return True, ""
+    except OSError as exc:
+        return False, str(exc)
+
+
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     # 打包后 pricing.json 在只读的资源区，首次运行复制一份到可写目录供用户修改

@@ -1,5 +1,7 @@
 # TokenPanel
 
+[![CI](https://github.com/hhxpoint/tokenpanel/actions/workflows/ci.yml/badge.svg)](https://github.com/hhxpoint/tokenpanel/actions/workflows/ci.yml)
+
 **自动检索本机所有 AI 客户端，把散落在各处的 token 用量汇总成一个可读的数字。**
 
 ![面板截图](docs/screenshot.png)

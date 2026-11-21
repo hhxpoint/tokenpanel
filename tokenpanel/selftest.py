@@ -186,6 +186,32 @@ def test_runtime(r: Runner) -> None:
     r.check("扫描状态结构", scan_status_shape)
 
 
+def test_recovery(r: Runner) -> None:
+    from . import config
+
+    def corrupt_heals() -> None:
+        import sqlite3
+        import tempfile
+
+        bad = Path(tempfile.mkdtemp()) / "bad.db"
+        bad.write_bytes(b"not a database" * 200)
+        conn = db.connect(bad)
+        try:
+            n = conn.execute("SELECT COUNT(*) FROM usage_event").fetchone()[0]
+            _eq(n, 0)
+        finally:
+            conn.close()
+        assert any("corrupt" in f.name for f in bad.parent.iterdir()), "应保留隔离文件"
+
+    def writable_probe() -> None:
+        ok, err = config.is_writable()
+        _assert(ok is True)
+        _eq(err, "")
+
+    r.check("损坏库自动重建", corrupt_heals)
+    r.check("数据目录可写", writable_probe)
+
+
 def test_updater(r: Runner) -> None:
     from . import updater
 
@@ -228,11 +254,31 @@ def test_limits(r: Runner) -> None:
         _assert(_tokens(10**12) <= 2_000_000_000)
 
     def csv_cap() -> None:
+        # 用临时库，避免依赖本机真实数据（CI 上是空库）
+        import tempfile
+        import time as _t
+        from tokenpanel import config as cfg
+
+        tmp = Path(tempfile.mkdtemp()) / "cap.db"
+        conn = db.connect(tmp)
+        now = int(_t.time() * 1000)
+        db.upsert_events(conn, [
+            ("claude", "s", f"k{i}", now, "p", "m", 1, 1, 0, 0, 0, 0.0, "priced", "exact")
+            for i in range(5)
+        ])
+        conn.commit()
+        conn.close()
+
+        old = cfg.DB_PATH
+        cfg.DB_PATH = tmp
         try:
-            export_csv(0, max_rows=1)
-        except ValueError:
-            return
-        raise AssertionError("超过上限时应抛 ValueError")
+            try:
+                export_csv(0, max_rows=1)
+            except ValueError:
+                return
+            raise AssertionError("超过上限时应抛 ValueError")
+        finally:
+            cfg.DB_PATH = old
 
     r.check("脏 token 值收敛", clamp)
     r.check("导出超限报错", csv_cap)
@@ -272,4 +318,6 @@ def main() -> int:
     print("[更新与限额]")
     test_updater(r)
     test_limits(r)
+    print("[故障恢复]")
+    test_recovery(r)
     return r.report()

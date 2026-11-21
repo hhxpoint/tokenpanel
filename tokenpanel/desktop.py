@@ -32,6 +32,16 @@ if sys.stderr is None:
 APP_TITLE = "TokenPanel"
 
 
+def alert(text: str, title: str = APP_TITLE) -> None:
+    """无控制台的打包环境里，用系统弹窗把问题讲清楚。"""
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, title, 0x10)
+    except Exception:
+        print(text)
+
+
 def _browser_candidates() -> list[Path]:
     env = os.environ
     roots = [
@@ -124,6 +134,17 @@ def _watch_for_close() -> None:
 
 def run(port: int = 8765, rescan: bool = True) -> None:
     config.ensure_dirs()
+
+    ok, err = config.is_writable()
+    if not ok:
+        alert(
+            "无法写入数据目录：\n"
+            f"{config.DATA_DIR}\n\n"
+            f"{err}\n\n"
+            "请把 TokenPanel.exe 移到有写权限的文件夹（例如桌面或文档）后重试。"
+        )
+        sys.exit(2)
+
     url = f"http://127.0.0.1:{port}"
 
     if _port_open(port):
