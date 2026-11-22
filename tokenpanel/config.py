@@ -63,11 +63,46 @@ def is_writable() -> tuple[bool, str]:
 
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    # 打包后 pricing.json 在只读的资源区，首次运行复制一份到可写目录供用户修改
+    bundled = BUNDLE / "pricing.json"
+    if bundled.exists() and bundled.resolve() == PRICING_PATH.resolve():
+        return
     if not PRICING_PATH.exists():
-        bundled = BUNDLE / "pricing.json"
-        if bundled.exists() and bundled.resolve() != PRICING_PATH.resolve():
-            try:
-                shutil.copyfile(bundled, PRICING_PATH)
-            except OSError:
-                pass
+        # 首次运行：把内置价格表复制到可写目录供用户修改
+        try:
+            shutil.copyfile(bundled, PRICING_PATH)
+        except OSError:
+            pass
+        return
+    # 已存在：只补充新版本新增的模型，绝不覆盖用户改过的价格
+    _merge_pricing(bundled, PRICING_PATH)
+
+
+def _merge_pricing(bundled: Path, user: Path) -> None:
+    import json
+
+    try:
+        base = json.loads(bundled.read_text(encoding="utf-8"))
+        current = json.loads(user.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+
+    changed = False
+    models = current.setdefault("models", {})
+    for name, price in base.get("models", {}).items():
+        if name not in models:
+            models[name] = price
+            changed = True
+
+    sources = current.setdefault("_sources", {})
+    for name, note in base.get("_sources", {}).items():
+        if name not in sources:
+            sources[name] = note
+            changed = True
+
+    if changed:
+        try:
+            user.write_text(
+                json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            pass
