@@ -12,6 +12,8 @@
 
 ## 直接下载（无需安装 Python）
 
+**官网 · https://hhxpoint.github.io/tokenpanel/**
+
 **[⬇ 下载 TokenPanel.exe](https://github.com/hhxpoint/tokenpanel/releases/latest)**
 
 双击就能用，5–15 秒后看到本机所有 AI 客户端的用量。
