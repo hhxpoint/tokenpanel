@@ -190,6 +190,7 @@ def health() -> JSONResponse:
             "SELECT ts, client, errors FROM scan_log WHERE errors != '' ORDER BY ts DESC LIMIT 10"
         ).fetchall()
         unpriced = pricing.unpriced_models(conn)
+        unnamed = pricing.unnamed_stats(conn)
         total = conn.execute("SELECT COUNT(*) AS n FROM usage_event").fetchone()["n"]
     return JSONResponse(
         {
@@ -197,6 +198,7 @@ def health() -> JSONResponse:
             "sources": [dict(r) for r in last],
             "recent_errors": [dict(r) for r in errs],
             "unpriced_models": unpriced,
+            "unnamed": unnamed,
             "version": __version__,
             "deps": doctor.dependency_status(),
             "scan": runtime.scan_status(),

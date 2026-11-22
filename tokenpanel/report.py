@@ -138,6 +138,9 @@ def cmd_report(args: argparse.Namespace) -> None:
             for m in misses[:12]:
                 print(f"    {m}")
             print("  如需金额，请在 pricing.json 的 models 下补充单价后执行: scan --recalc")
+        unnamed = pricing.unnamed_stats(conn)
+        if unnamed["count"]:
+            print(f"\n· 另有 {unnamed['count']} 条记录缺少模型名（{human(unnamed['tokens'])} tokens），无法计价")
 
 
 def cmd_discover(args: argparse.Namespace) -> None:

@@ -77,6 +77,19 @@ def test_pricing(r: Runner) -> None:
         lambda: _assert(abs(pricing.cost_of("deepseek-flash", 1_000_000, 0, 0, 0) - 0.28) < 1e-9),
     )
 
+    def longest_match() -> None:
+        # 带渠道前缀时不能被更短的型号名抢走
+        _, hit = pricing.resolve("xiaomi/mimo-v2.5-pro-ultraspeed")
+        _eq(hit, "mimo-v2.5-pro-ultraspeed")
+        _, hit2 = pricing.resolve("mimo-v2.5-pro")
+        _eq(hit2, "mimo-v2.5-pro")
+
+    def free_model_zero() -> None:
+        _eq(pricing.cost_of("opencode/big-pickle", 1_000_000, 1_000_000, 1_000_000, 0), 0.0)
+
+    r.check("最长型号优先匹配", longest_match)
+    r.check("免费模型恒为 0", free_model_zero)
+
 
 def test_project(r: Runner) -> None:
     r.check("Windows 路径取末两级", lambda: _eq(short_project(r"C:\a\b\c"), "b/c"))

@@ -181,11 +181,13 @@ def _health() -> dict:
         ]
         total = conn.execute("SELECT COUNT(*) AS n FROM usage_event").fetchone()["n"]
         unpriced = pricing.unpriced_models(conn)
+        unnamed = pricing.unnamed_stats(conn)
     return {
         "events": total,
         "sources": sources,
         "recent_errors": errors,
         "unpriced_models": unpriced,
+        "unnamed": unnamed,
         "version": __version__,
         "deps": doctor.dependency_status(),
         "scan": runtime.scan_status(),

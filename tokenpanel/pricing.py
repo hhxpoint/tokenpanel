@@ -40,12 +40,19 @@ def resolve(model: str | None) -> tuple[dict | None, str | None]:
         return FREE, "__free__"
     if name in models:
         return models[name], name
-    for key, price in models.items():
-        if name.startswith(key):
-            return price, key
-    for key, price in models.items():
-        if key in name:
-            return price, key
+
+    # 前缀匹配取最长，避免短键抢走更具体的型号
+    prefix_hits = [(k, v) for k, v in models.items() if name.startswith(k)]
+    if prefix_hits:
+        key, price = max(prefix_hits, key=lambda kv: len(kv[0]))
+        return price, key
+
+    # 包含匹配同样取最长
+    contains_hits = [(k, v) for k, v in models.items() if k in name]
+    if contains_hits:
+        key, price = max(contains_hits, key=lambda kv: len(kv[0]))
+        return price, key
+
     return None, None
 
 
@@ -62,11 +69,21 @@ def cost_of(model: str | None, inp: int, out: int, cache_read: int, cache_write:
 
 
 def unpriced_models(conn: sqlite3.Connection) -> list[str]:
+    """有模型名但价格表没覆盖的型号——这些补价格就有意义。"""
     rows = conn.execute(
         "SELECT DISTINCT model FROM usage_event WHERE model IS NOT NULL AND model != ''"
     ).fetchall()
-    misses = [m for (m,) in rows if resolve(m)[0] is None]
-    return sorted(misses)
+    return sorted(m for (m,) in rows if resolve(m)[0] is None)
+
+
+def unnamed_stats(conn: sqlite3.Connection) -> dict:
+    """日志里没有记录模型名的记录——补价格也没用，需要如实说明。"""
+    row = conn.execute(
+        """SELECT COUNT(*) AS n,
+                  COALESCE(SUM(input+output+cache_read+cache_write),0) AS tokens
+           FROM usage_event WHERE model IS NULL OR model = ''"""
+    ).fetchone()
+    return {"count": row["n"], "tokens": row["tokens"]}
 
 
 def recalc(conn: sqlite3.Connection) -> int:
