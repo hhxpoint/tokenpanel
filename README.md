@@ -189,6 +189,32 @@ Codex             2     6285      378    1.42万        0    2.09万          -
 总计 20.01亿 tokens：输入 1.59亿 · 输出 836.0万 · 缓存读 18.34亿 · 缓存写 21.31万 · 推理 68.05万
 ```
 
+
+## 本地 API
+
+面板本身就是一个静态页面 + 本地只读接口，全部绑定 `127.0.0.1`，不对外暴露。
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/overview?days=7` | 总量、缓存命中率、按时段环比、各客户端分布 |
+| `GET /api/trend?days=30` | 按本地日期的每日堆叠数据（`days` 为日期字符串数组） |
+| `GET /api/models?days=30` | 模型维度聚合 |
+| `GET /api/projects?days=30` | 项目维度聚合 |
+| `GET /api/sessions?days=30&limit=40` | 会话维度聚合 |
+| `GET /api/credits` | WorkBuddy 会话级快照 |
+| `GET /api/health` | 数据源状态、依赖情况、扫描进度 |
+| `GET /api/version` | 版本与运行形态 |
+| `GET /api/update` | 查询最新版本（唯一会外联的接口，需显式调用） |
+| `GET /api/export?days=30` | 导出 CSV（UTF-8 BOM） |
+| `POST /api/scan?force=true` | 触发一次采集 |
+| `POST /api/heartbeat` | 页面心跳，窗口关闭后进程据此退出 |
+
+`days=0` 表示全部时间。
+
+## 更新记录
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 泛化机制
 
 新客户端层出不穷，逐个写适配器永远追不上。TokenPanel 用三层策略应对：

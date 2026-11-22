@@ -65,6 +65,25 @@ def overview(days: int = Query(7, ge=0, le=3650)) -> JSONResponse:
     d["cost"] = round(d["cost"] or 0, 4)
     d["by_client"] = [dict(r) for r in by_client]
     d["workbuddy"] = {"sessions": credit["n"], "credits": round(credit["credits"] or 0, 2)}
+
+    d["prev"] = None
+    if days > 0:
+        span = days * 86400 * 1000
+        prev_since = since - span
+        with db.session() as conn:
+            prev = conn.execute(
+                """SELECT COALESCE(SUM(input),0)+COALESCE(SUM(output),0)
+                          +COALESCE(SUM(cache_read),0)+COALESCE(SUM(cache_write),0) AS tokens,
+                          COALESCE(SUM(cost_usd),0) AS cost,
+                          COUNT(*) AS calls
+                   FROM usage_event WHERE ts >= ? AND ts < ?""",
+                (prev_since, since),
+            ).fetchone()
+        d["prev"] = {
+            "tokens": prev["tokens"],
+            "cost": round(prev["cost"], 4),
+            "calls": prev["calls"],
+        }
     return JSONResponse(d)
 
 
