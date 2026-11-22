@@ -23,10 +23,6 @@ def _since(days: int) -> int:
     return int((time.time() - days * 86400) * 1000)
 
 
-def _day_label(day: int) -> str:
-    return datetime.fromtimestamp(day * 86400).strftime("%m-%d")
-
-
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html", media_type="text/html; charset=utf-8")
@@ -44,7 +40,7 @@ def overview(days: int = Query(7, ge=0, le=3650)) -> JSONResponse:
                       COALESCE(SUM(cache_write),0) AS cache_write,
                       COALESCE(SUM(reasoning),0) AS reasoning,
                       COALESCE(SUM(cost_usd),0) AS cost,
-                      COUNT(DISTINCT ts/86400000) AS active_days,
+                      COUNT(DISTINCT date(ts/1000,'unixepoch','localtime')) AS active_days,
                       COUNT(DISTINCT client) AS clients,
                       COUNT(DISTINCT project) AS projects
                FROM usage_event WHERE ts >= ?""",
@@ -77,7 +73,8 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
     since = _since(days)
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT client, ts/86400000 AS day,
+            """SELECT client,
+                      date(ts/1000,'unixepoch','localtime') AS day,
                       SUM(input) AS input, SUM(output) AS output,
                       SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write,
                       SUM(cost_usd) AS cost
@@ -87,21 +84,16 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
         ).fetchall()
     days_set = sorted({r["day"] for r in rows})
     clients = sorted({r["client"] for r in rows})
-    series = {c: {"labels": [], "tokens": [], "cost": []} for c in clients}
     index = {(r["client"], r["day"]): r for r in rows}
-    for day in days_set:
-        for c in clients:
+    series = {c: {"tokens": [], "cost": []} for c in clients}
+    for c in clients:
+        for day in days_set:
             r = index.get((c, day))
-            s = series[c]
-            s["labels"].append(_day_label(day))
-            if r:
-                s["tokens"].append(
-                    (r["input"] or 0) + (r["output"] or 0) + (r["cache_read"] or 0) + (r["cache_write"] or 0)
-                )
-                s["cost"].append(round(r["cost"] or 0, 4))
-            else:
-                s["tokens"].append(0)
-                s["cost"].append(0.0)
+            series[c]["tokens"].append(
+                ((r["input"] or 0) + (r["output"] or 0) + (r["cache_read"] or 0) + (r["cache_write"] or 0))
+                if r else 0
+            )
+            series[c]["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
     return JSONResponse({"days": days_set, "series": series})
 
 

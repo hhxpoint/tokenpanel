@@ -186,6 +186,44 @@ def test_runtime(r: Runner) -> None:
     r.check("扫描状态结构", scan_status_shape)
 
 
+def test_timezone_buckets(r: Runner) -> None:
+    """按天统计必须用本地时区，否则北京时间凌晨的用量会被算到前一天。"""
+    import datetime
+    import tempfile
+
+    def local_midnight_stays() -> None:
+        tmp = Path(tempfile.mkdtemp()) / "tz.db"
+        conn = db.connect(tmp)
+        # 本地时间 00:30，属于当天
+        ts = int(datetime.datetime(2026, 11, 22, 0, 30).timestamp() * 1000)
+        db.upsert_events(conn, [
+            ("claude", "s", "k", ts, "p", "m", 10, 10, 0, 0, 0, 0.0, "priced", "exact")
+        ])
+        conn.commit()
+        day = conn.execute(
+            "SELECT date(ts/1000,'unixepoch','localtime') FROM usage_event"
+        ).fetchone()[0]
+        conn.close()
+        _eq(day, "2026-11-22")
+
+    def local_evening_stays() -> None:
+        tmp = Path(tempfile.mkdtemp()) / "tz2.db"
+        conn = db.connect(tmp)
+        ts = int(datetime.datetime(2026, 11, 22, 23, 30).timestamp() * 1000)
+        db.upsert_events(conn, [
+            ("claude", "s", "k", ts, "p", "m", 10, 10, 0, 0, 0, 0.0, "priced", "exact")
+        ])
+        conn.commit()
+        day = conn.execute(
+            "SELECT date(ts/1000,'unixepoch','localtime') FROM usage_event"
+        ).fetchone()[0]
+        conn.close()
+        _eq(day, "2026-11-22")
+
+    r.check("凌晨 00:30 归当天", local_midnight_stays)
+    r.check("深夜 23:30 归当天", local_evening_stays)
+
+
 def test_service(r: Runner) -> None:
     """端到端冒烟：真正起一次 HTTP 服务并访问各端点（CI 也跑）。"""
     import json
@@ -391,6 +429,8 @@ def main() -> int:
     test_limits(r)
     print("[故障恢复]")
     test_recovery(r)
+    print("[时区归日]")
+    test_timezone_buckets(r)
     print("[服务冒烟]")
     test_service(r)
     return r.report()

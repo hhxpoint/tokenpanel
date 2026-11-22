@@ -605,7 +605,7 @@ function axisFormatter(maxV){
 function renderTrend(t){
   const svg = $("#trendChart");
   const clients = Object.keys(t.series).sort();
-  const labels = clients.length ? t.series[clients[0]].labels : [];
+  const labels = (t.days || []).map(d => String(d).slice(5));
   $("#legend").innerHTML = clients.map((c,i)=>
     `<span><i style="background:${colorOf(c,i)}"></i>${esc(nameOf(c))}</span>`).join("");
 
@@ -666,18 +666,27 @@ function renderShare(o){
     </div>`;
 }
 
+function ymd(d){
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+
 function renderHeat(t){
+  const days = t.days || [];
   const map = {};
-  (t.days || []).forEach(d => { map[d] = 0; });
+  days.forEach(d => { map[d] = 0; });
   Object.values(t.series).forEach(s=>{
-    s.labels.forEach((_,i)=>{
-      const d = t.days && t.days[i];
-      if (d !== undefined) map[d] = (map[d]||0) + s.tokens[i];
+    s.tokens.forEach((v,i)=>{
+      const d = days[i];
+      if (d) map[d] = (map[d]||0) + v;
     });
   });
-  const today = Math.floor(Date.now() / 86400000);
+  // 固定展示最近 91 天，按本地日期逐日推进
+  const now = new Date();
   const span = 91, keys = [];
-  for (let i = span - 1; i >= 0; i--) keys.push(today - i);
+  for (let i = span - 1; i >= 0; i--){
+    keys.push(ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)));
+  }
   const vals = keys.map(k => map[k] || 0);
   const max = Math.max(...vals, 1);
   const q = [0.12,0.3,0.55,0.8].map(p=>max*p);
@@ -686,7 +695,7 @@ function renderHeat(t){
     const v = vals[i];
     let lv = v>0 ? 1 : 0;
     if (v>q[0]) lv=2; if (v>q[1]) lv=3; if (v>q[2]) lv=4; if (v>q[3]) lv=5;
-    const label = new Date(k*86400000).toISOString().slice(5,10);
+    const label = k.slice(5);
     return `<div class="cell l${lv}" title="${label} · ${fmt(v)}"
       style="animation-delay:${REDUCE?0:Math.min(.4, i*0.004)}s"></div>`;
   }).join("");

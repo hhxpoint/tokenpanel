@@ -23,10 +23,6 @@ def _since(days: int) -> int:
     return 0 if days <= 0 else int((time.time() - days * 86400) * 1000)
 
 
-def _label(day: int) -> str:
-    return datetime.fromtimestamp(day * 86400).strftime("%m-%d")
-
-
 def _overview(days: int) -> dict:
     since = _since(days)
     with db.session() as conn:
@@ -36,7 +32,7 @@ def _overview(days: int) -> dict:
                           COALESCE(SUM(output),0) AS output, COALESCE(SUM(cache_read),0) AS cache_read,
                           COALESCE(SUM(cache_write),0) AS cache_write, COALESCE(SUM(reasoning),0) AS reasoning,
                           COALESCE(SUM(cost_usd),0) AS cost,
-                          COUNT(DISTINCT ts/86400000) AS active_days,
+                          COUNT(DISTINCT date(ts/1000,'unixepoch','localtime')) AS active_days,
                           COUNT(DISTINCT client) AS clients,
                           COUNT(DISTINCT project) AS projects
                    FROM usage_event WHERE ts >= ?""",
@@ -67,10 +63,13 @@ def _trend(days: int) -> dict:
     since = _since(days)
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT client, ts/86400000 AS day, SUM(input) AS input, SUM(output) AS output,
+            """SELECT client,
+                      date(ts/1000,'unixepoch','localtime') AS day,
+                      SUM(input) AS input, SUM(output) AS output,
                       SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write,
                       SUM(cost_usd) AS cost
-               FROM usage_event WHERE ts >= ? GROUP BY client, day ORDER BY day""",
+               FROM usage_event WHERE ts >= ?
+               GROUP BY client, day ORDER BY day""",
             (since,),
         ).fetchall()
     days_set = sorted({r["day"] for r in rows})
@@ -78,16 +77,15 @@ def _trend(days: int) -> dict:
     index = {(r["client"], r["day"]): r for r in rows}
     series = {}
     for c in clients:
-        s = {"labels": [], "tokens": [], "cost": []}
+        item = {"tokens": [], "cost": []}
         for day in days_set:
             r = index.get((c, day))
-            s["labels"].append(_label(day))
-            s["tokens"].append(
+            item["tokens"].append(
                 ((r["input"] or 0) + (r["output"] or 0) + (r["cache_read"] or 0) + (r["cache_write"] or 0))
                 if r else 0
             )
-            s["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
-        series[c] = s
+            item["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
+        series[c] = item
     return {"days": days_set, "series": series}
 
 
