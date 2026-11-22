@@ -186,6 +186,77 @@ def test_runtime(r: Runner) -> None:
     r.check("扫描状态结构", scan_status_shape)
 
 
+def test_service(r: Runner) -> None:
+    """端到端冒烟：真正起一次 HTTP 服务并访问各端点（CI 也跑）。"""
+    import json
+    import socket
+    import threading
+    import time as _t
+    import urllib.request
+
+    from . import server_fallback
+
+    PORT = 8799
+
+    with socket.socket() as sock:
+        if sock.connect_ex(("127.0.0.1", PORT)) == 0:
+            print("  (端口 8799 已占用，跳过服务冒烟)")
+            return
+
+    threading.Thread(
+        target=server_fallback.serve, args=(PORT, False, True), daemon=True
+    ).start()
+
+    base = f"http://127.0.0.1:{PORT}"
+
+    def ready() -> None:
+        deadline = _t.time() + 12
+        while _t.time() < deadline:
+            try:
+                urllib.request.urlopen(base + "/", timeout=0.5)
+                return
+            except Exception:
+                _t.sleep(0.1)
+        raise AssertionError("服务 12 秒内未就绪")
+
+    def fetch(path: str) -> bytes:
+        return urllib.request.urlopen(base + path, timeout=6).read()
+
+    def page() -> None:
+        _assert(b"TokenPanel" in fetch("/"))
+
+    def health() -> None:
+        d = json.loads(fetch("/api/health"))
+        for key in ("events", "deps", "scan", "sources"):
+            _assert(key in d)
+        _assert(isinstance(d["deps"].get("zstandard"), bool))
+
+    def overview() -> None:
+        d = json.loads(fetch("/api/overview?days=7"))
+        for key in ("tokens", "calls", "by_client", "cache_hit"):
+            _assert(key in d)
+
+    def trend() -> None:
+        d = json.loads(fetch("/api/trend?days=7"))
+        _assert("series" in d and "days" in d)
+
+    def version() -> None:
+        d = json.loads(fetch("/api/version"))
+        _assert(d.get("version"))
+
+    def export() -> None:
+        raw = fetch("/api/export?days=7")
+        _assert(raw[:3] == b"\xef\xbb\xbf", "CSV 应带 UTF-8 BOM")
+
+    r.check("服务可启动", ready)
+    r.check("GET / 返回页面", page)
+    r.check("GET /api/health", health)
+    r.check("GET /api/overview", overview)
+    r.check("GET /api/trend", trend)
+    r.check("GET /api/version", version)
+    r.check("GET /api/export", export)
+
+
 def test_recovery(r: Runner) -> None:
     from . import config
 
@@ -289,9 +360,9 @@ def _eq(actual, expected) -> None:
         raise AssertionError(f"期望 {expected!r}，实际 {actual!r}")
 
 
-def _assert(cond) -> None:
+def _assert(cond, message: str = "") -> None:
     if not cond:
-        raise AssertionError("断言失败")
+        raise AssertionError(message or "断言失败")
 
 
 def main() -> int:
@@ -320,4 +391,6 @@ def main() -> int:
     test_limits(r)
     print("[故障恢复]")
     test_recovery(r)
+    print("[服务冒烟]")
+    test_service(r)
     return r.report()

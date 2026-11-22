@@ -281,20 +281,21 @@ def _watchdog() -> None:
             os._exit(0)
 
 
-def serve(port: int = 8765, watch: bool = False) -> None:
+def serve(port: int = 8765, watch: bool = False, quiet: bool = False) -> None:
     import threading
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as exc:
-        print(f"端口 {port} 无法绑定：{exc}")
-        print(f"可能已有实例在运行；如需换端口：python -m tokenpanel serve --port {port + 1}")
+        if not quiet:
+            print(f"端口 {port} 无法绑定：{exc}")
+            print(f"可能已有实例在运行；如需换端口：python -m tokenpanel serve --port {port + 1}")
         raise SystemExit(1)
     if watch:
         threading.Thread(target=_watchdog, daemon=True).start()
-        print(f"面板地址: http://127.0.0.1:{port}  (标准库模式 · 窗口关闭后自动退出)")
-    else:
-        print(f"面板地址: http://127.0.0.1:{port}  (标准库模式)")
+    if not quiet:
+        suffix = " · 窗口关闭后自动退出" if watch else ""
+        print(f"面板地址: http://127.0.0.1:{port}  (标准库模式{suffix})")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

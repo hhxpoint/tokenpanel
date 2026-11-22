@@ -8,7 +8,13 @@
 <meta name="description" content="自动检索本机 AI 客户端，把 Claude Code、Codex、OpenCode、dsh、WorkBuddy 的 token 用量汇总成一个数字。单文件客户端，双击即用。">
 <meta property="og:title" content="TokenPanel · 看清你的 AI 用量">
 <meta property="og:description" content="自动检索本机 AI 客户端，量化全部 token 用量。单文件客户端，无需安装 Python。">
-<meta property="og:image" content="screenshot.png">
+<meta property="og:image" content="https://hhxpoint.github.io/tokenpanel/screenshot.png">
+<meta property="og:url" content="https://hhxpoint.github.io/tokenpanel/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TokenPanel · 看清你的 AI 用量">
+<meta name="twitter:description" content="自动检索本机 AI 客户端，量化全部 token 用量。单文件客户端，双击即用。">
+<meta name="twitter:image" content="https://hhxpoint.github.io/tokenpanel/screenshot.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23d9542b'/%3E%3Cpath d='M6 17v-5M12 17V7M18 17v-3' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   :root{
@@ -21,6 +27,8 @@
     --r:16px; --ease:cubic-bezier(.22,1,.36,1);
   }
   *{box-sizing:border-box}
+  img{max-width:100%;height:auto}
+  body{overflow-x:hidden}
   html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
   body{
     margin:0;background:var(--bg);color:var(--text);
@@ -52,7 +60,8 @@
   h1{font-size:46px;line-height:1.15;letter-spacing:-1.6px;margin:20px 0 14px;font-weight:700}
   h1 span{background:linear-gradient(100deg,#d9542b,#a83a16);-webkit-background-clip:text;
     background-clip:text;color:transparent}
-  .lede{font-size:16.5px;color:var(--text2);max-width:620px;margin:0 auto 30px;line-height:1.7}
+  .lede{font-size:16.5px;color:var(--text2);max-width:620px;margin:0 auto 30px;line-height:1.7;
+    overflow-wrap:anywhere}
 
   /* 下载 */
   .dl-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -114,9 +123,10 @@
   .note b{font-weight:650}
 
   /* 支持矩阵 */
-  .matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px;
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-    overflow:hidden;box-shadow:var(--shadow-sm)}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;
+    border-radius:var(--r);box-shadow:var(--shadow-sm)}
+  .matrix{width:100%;min-width:540px;border-collapse:separate;border-spacing:0;font-size:13.5px;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
   .matrix th{text-align:left;font-weight:550;font-size:12px;color:var(--muted);
     padding:12px 18px;border-bottom:1px solid var(--line);background:#fcfbf9}
   .matrix td{padding:12px 18px;border-bottom:1px solid #f5f3ee}
@@ -253,6 +263,7 @@
       <h2>支持范围</h2>
       <p>能拿到逐条 usage 的才统计，拿不到的如实标注，不做估算</p>
     </div>
+    <div class="table-scroll">
     <table class="matrix">
       <thead><tr><th>客户端</th><th>采集粒度</th><th>状态</th></tr></thead>
       <tbody>
@@ -265,6 +276,7 @@
         <tr><td>Cursor / Trae / Windsurf / Copilot</td><td>用量在云端 Dashboard</td><td class="no">仅发现，不估算</td></tr>
       </tbody>
     </table>
+    </div>
   </section>
 
   <footer>
