@@ -75,6 +75,7 @@ class Harness:
     size_mb: float = 0.0
     evidence: str = ""
     note: str = ""
+    scannable: bool = False   # 是否交给通用探测器尝试读取
 
     def as_dict(self) -> dict:
         return {
@@ -85,7 +86,112 @@ class Harness:
             "size_mb": round(self.size_mb, 1),
             "evidence": self.evidence,
             "note": self.note,
+            "scannable": self.scannable,
         }
+
+
+# 这些目录不可能是「客户端会话数据」，扫了纯属浪费时间且容易误判
+IGNORE_NAMES = {
+    ".git", ".github", ".vscode", ".vscode-server", ".vscode-insiders", "node_modules",
+    ".cache", ".npm", ".pnpm-store", ".yarn", ".ssh", ".gnupg", ".rustup", ".cargo",
+    ".gradle", ".m2", ".conda", ".venv", "venv", "__pycache__", ".idea", ".android",
+    "Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos", "OneDrive",
+    "AppData", "Library", "Applications", "Program Files", "Program Files (x86)",
+}
+
+SESSION_SUBDIRS = ("sessions", "projects", "conversations", "chats", "threads", "history")
+SESSION_SUFFIXES = (".jsonl", ".jsonl.zst", ".jsonl.zstd", ".jsonl.gz")
+
+
+USAGE_MARKERS = (
+    b'"usage"', b"input_tokens", b"inputtokens", b"prompt_tokens",
+    b"prompttokens", b"cached_input_tokens", b"cache_read_tokens",
+    b"total_tokens", b"totaltokens",
+)
+
+
+def _has_usage_signal(path: Path, max_files: int = 4, max_bytes: int = 300_000) -> tuple[bool, str]:
+    """读前几个 jsonl 文件的开头，确认里面真的写了 usage/token 字段。
+
+    只看「有没有 jsonl」会把 Electron 缓存、网盘客户端全都算进来，
+    必须看内容才能把误报压下去。
+    """
+    seen = 0
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [d for d in dirs if d.lower() not in IGNORE_NAMES][:12]
+        for name in files:
+            low = name.lower()
+            if not low.endswith(SESSION_SUFFIXES):
+                continue
+            full = Path(root) / name
+            try:
+                if full.stat().st_size > 200 * 1024 * 1024:
+                    continue
+                with full.open("rb") as fh:
+                    chunk = fh.read(max_bytes).lower()
+            except OSError:
+                continue
+            if any(marker in chunk for marker in USAGE_MARKERS):
+                try:
+                    rel = full.relative_to(path).as_posix()
+                except ValueError:
+                    rel = name
+                return True, rel
+            seen += 1
+            if seen >= max_files:
+                return False, ""
+    return False, ""
+
+
+def _looks_like_session_data(path: Path, max_depth: int = 3, cap_files: int = 120) -> tuple[bool, str]:
+    """不认识的目录里，靠文件特征判断它是不是会话数据。
+
+    只看三层深度、最多 120 个文件，避免在陌生目录上做全量遍历。
+    命中条件：存在 sessions/projects 之类的子目录，且其中有 jsonl（含压缩）文件。
+    """
+    hit_dir = ""
+    for name in SESSION_SUBDIRS:
+        sub = path / name
+        try:
+            if sub.is_dir():
+                hit_dir = name
+                break
+        except OSError:
+            continue
+
+    if not hit_dir:
+        return False, ""
+
+    seen = 0
+    base_depth = len(sub.parts)
+    try:
+        for root, dirs, files in os.walk(path / hit_dir):
+            dirs[:] = [d for d in dirs if d.lower() not in IGNORE_NAMES][:20]
+            if len(Path(root).parts) - base_depth > max_depth:
+                dirs[:] = []
+                continue
+            for f in files:
+                seen += 1
+                if seen > cap_files:
+                    return False, ""
+                low = f.lower()
+                if low.endswith(SESSION_SUFFIXES):
+                    return True, f"{hit_dir}/…/{f}"
+    except OSError:
+        return False, ""
+    return False, ""
+
+
+def scan_roots() -> list[Path]:
+    """一级目录扫描的根：HOME + 各平台应用数据目录。"""
+    roots = [HOME]
+    for extra in (APPDATA, LOCALAPPDATA, APP_SUPPORT, XDG_CONFIG, XDG_DATA):
+        try:
+            if extra.exists() and extra != HOME:
+                roots.append(extra)
+        except OSError:
+            continue
+    return roots
 
 
 def _dir_size_mb(path: Path, cap_files: int = 4000) -> float:
@@ -158,7 +264,13 @@ def _sqlite_has_tokens(db: Path) -> bool:
                     cols = [r[1].lower() for r in conn.execute(f'PRAGMA table_info("{t}")')]
                 except sqlite3.Error:
                     continue
-                if any("token" in c or "usage" in c or "credit" in c for c in cols):
+                token_cols = [c for c in cols if "token" in c]
+                has_in = any(("input" in c or "prompt" in c) for c in token_cols)
+                has_out = any(("output" in c or "completion" in c) for c in token_cols)
+                # 必须成对出现才算用量表；只有一个 token 列的多半是 API Key 之类的凭据表
+                if has_in and has_out:
+                    return True
+                if len(token_cols) >= 2 and any("cache" in c for c in token_cols):
                     return True
         finally:
             conn.close()
@@ -222,14 +334,25 @@ def discover(deep: bool = False) -> list[Harness]:
             size_mb=_dir_size_mb(path) if deep else 0.0,
             evidence=evidence,
             note="" if client in SUPPORTED else UNSUPPORTED_REASON.get(client, "暂无对应采集器"),
+            scannable=(client not in SUPPORTED and kind in ("jsonl_dir", "sqlite")),
         )
 
     # 2. 一级目录扫描（HOME 下的点目录 + 各平台的应用数据根）
-    roots = [HOME]
-    for extra_root in (APPDATA, LOCALAPPDATA, APP_SUPPORT, XDG_CONFIG, XDG_DATA):
-        if extra_root.exists() and extra_root != HOME:
-            roots.append(extra_root)
-    for root in roots:
+    # 已被「已知位置」覆盖的目录不再重复收录（含其父目录与编辑器目录）
+    covered: set[str] = set()
+    for _, p, _, _ in known_paths():
+        covered.add(str(p))
+        try:
+            covered.add(str(p.parent))
+        except OSError:
+            pass
+    for base in (APPDATA, APP_SUPPORT, XDG_CONFIG):
+        for editor in ("Code", "Cursor", "Trae", "Windsurf", "Code - Insiders"):
+            covered.add(str(base / editor))
+
+    generic_found: list[tuple[float, Harness]] = []
+
+    for root in scan_roots():
         if not root.exists():
             continue
         try:
@@ -237,19 +360,69 @@ def discover(deep: bool = False) -> list[Harness]:
         except OSError:
             continue
         for entry in entries:
-            if not entry.is_dir():
+            try:
+                if not entry.is_dir():
+                    continue
+            except OSError:
                 continue
+            if entry.name in IGNORE_NAMES or str(entry) in covered:
+                continue
+
             client = _match_hint(entry.name)
-            if not client or client in found:
+            if client and client in found:
                 continue
+
             # AppData 里大量同名程序目录，要求有进一步证据才收录
             kind, evidence = _fingerprint(entry)
+
+            if not client:
+                # 名字不认识：用「有没有会话文件」这个特征兜底，
+                # 这样新出现的客户端也能被发现，而不是必须等我写适配器
+                if kind == "sqlite" and "含 token 字段" in evidence:
+                    # 通用探测器只读 jsonl，sqlite 需要专门适配器，这里只如实报告
+                    scannable = False
+                elif kind in ("unknown", "missing", "jsonl_dir"):
+                    hit, ev = _looks_like_session_data(entry)
+                    if not hit:
+                        continue
+                    # 再确认内容里确实有 usage 字段，避免把 Electron 缓存当成客户端
+                    # 注意：_has_usage_signal 返回 (bool, evidence)，必须解包后再判断
+                    has_usage, _ = _has_usage_signal(entry)
+                    if not has_usage:
+                        continue
+                    kind, evidence = "jsonl_dir", ev
+                else:
+                    # log_dir 之类的陌生目录不采信
+                    continue
+                key = f"generic:{entry.name}"
+                if key in found:
+                    continue
+                try:
+                    mtime = entry.stat().st_mtime
+                except OSError:
+                    mtime = 0.0
+                generic_found.append((
+                    mtime,
+                    Harness(
+                        client=key,
+                        path=str(entry),
+                        supported=False,
+                        scannable=(kind == "jsonl_dir"),
+                        kind=kind,
+                        size_mb=_dir_size_mb(entry) if deep else 0.0,
+                        evidence=evidence,
+                        note="未识别的客户端，已交给通用探测器尝试读取",
+                    ),
+                ))
+                continue
+
             if kind in ("unknown", "missing"):
                 continue
             found[client] = Harness(
                 client=client,
                 path=str(entry),
                 supported=False,
+                scannable=(kind in ("jsonl_dir", "sqlite")),
                 kind=kind,
                 size_mb=_dir_size_mb(entry) if deep else 0.0,
                 evidence=evidence,
@@ -287,6 +460,10 @@ def discover(deep: bool = False) -> list[Harness]:
                     note=UNSUPPORTED_REASON.get(client, "扩展数据中未发现 token 字段"),
                 )
 
+    # 陌生来源最多保留 8 个，按最近活动时间排序，避免扫描面上铺得太大
+    for _, harness in sorted(generic_found, key=lambda x: x[0], reverse=True)[:8]:
+        found.setdefault(harness.client, harness)
+
     items = list(found.values())
     items.sort(key=lambda h: (not h.supported, h.client))
     return items
@@ -297,4 +474,36 @@ def summary(items: list[Harness]) -> dict:
         "total": len(items),
         "supported": [h.client for h in items if h.supported],
         "detected_only": [h.client for h in items if not h.supported],
+    }
+
+
+def report(deep: bool = False) -> dict:
+    """给界面用的完整探测报告：找到了什么、查过哪些位置、为什么没有数据。"""
+    items = discover(deep=deep)
+
+    checked: list[dict] = []
+    seen: set[str] = set()
+    for client, path, kind, evidence in known_paths():
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            exists = path.exists()
+        except OSError:
+            exists = False
+        checked.append({
+            "client": client,
+            "path": key,
+            "exists": exists,
+            "kind": kind,
+            "evidence": evidence,
+        })
+
+    return {
+        "found": [h.as_dict() for h in items],
+        "checked": checked,
+        "roots": [str(p) for p in scan_roots()],
+        "summary": summary(items),
+        "platform": sys.platform,
     }

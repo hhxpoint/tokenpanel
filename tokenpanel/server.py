@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import __version__, catalog, config, db, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
+from . import __version__, catalog, config, db, discovery, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -147,6 +147,11 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
             )
             series[c]["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
     return JSONResponse({"days": days_set, "series": series})
+
+
+@app.get("/api/discovery")
+def discovery_report() -> JSONResponse:
+    return JSONResponse(discovery.report())
 
 
 @app.get("/api/fx")

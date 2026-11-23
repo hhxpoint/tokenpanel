@@ -360,6 +360,34 @@
   }
   .toast.show{opacity:1;transform:translate(-50%,0)}
 
+  /* ---------- 首次使用向导 / 本机检测 ---------- */
+  .empty-guide{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+    padding:18px 20px;margin:6px 0 12px;box-shadow:var(--shadow-sm);
+  }
+  .empty-guide[hidden]{display:none}
+  .empty-guide h3{margin:0 0 6px;font-size:14.5px;font-weight:650;letter-spacing:-.2px}
+  .empty-guide p{margin:0 0 10px;font-size:12.5px;color:var(--text-2);line-height:1.7}
+  .empty-guide .paths{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;
+    color:var(--muted);line-height:1.9;background:var(--surface-2);border-radius:8px;
+    padding:9px 12px;max-height:150px;overflow:auto;
+  }
+  .empty-guide .paths .ok{color:#1b7a45;font-weight:600}
+  .empty-guide .paths .no{color:#a8a29e}
+  .empty-guide .muted{font-size:11.5px;color:var(--muted);margin:10px 0 0}
+
+  .disc-head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+  .disc-head b{font-size:12.5px}
+  .disc-head span{font-size:11.5px;color:var(--muted)}
+  .disc-list{display:flex;flex-direction:column;gap:6px}
+  .disc-item{display:flex;align-items:center;gap:8px;font-size:11.5px;flex-wrap:wrap}
+  .disc-item .bdg{flex:none}
+  .disc-name{font-weight:600;min-width:96px}
+  .disc-path{color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:10.5px;word-break:break-all}
+  .disc-note{color:var(--muted);font-size:10.5px}
+
   /* ---------- 栏目切换 ---------- */
   .tabs{display:flex;gap:4px;margin:14px 0 12px;padding:3px;background:var(--surface-2);
     border:1px solid var(--border);border-radius:10px;width:fit-content}
@@ -534,6 +562,7 @@
     <div class="scan-log" id="scanLog" hidden></div>
   </div>
 
+  <div class="empty-guide" id="emptyGuide" hidden></div>
   <section class="kpis" id="kpis" aria-label="汇总指标"></section>
   <div class="ledger rise d1" id="ledger"></div>
 
@@ -603,6 +632,7 @@
   <div class="card rise d6">
     <div class="chead"><div><h3>数据源状态</h3><div class="hint">未定价模型只统计 token，不计入金额</div></div></div>
     <div id="health"></div>
+    <div id="discovery" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)"></div>
   </div>
 
   </div><!-- /view-dash -->
@@ -1143,6 +1173,50 @@ function renderHealth(h){
   $("#dbPath").textContent = "数据库 " + p.split("/").slice(-2).join("/");
 }
 
+/* ---------- 本机检测 ---------- */
+function renderDiscovery(disc){
+  const el = $("#discovery");
+  if (!el) return;
+  const found = (disc && disc.found) || [];
+  const checked = (disc && disc.checked) || [];
+  const exists = checked.filter(c => c.exists).length;
+
+  const rows = found.map(h => {
+    const label = h.supported ? "已接入" : (h.scannable ? "通用读取" : "仅发现");
+    const cls = h.supported ? "ok" : (h.scannable ? "pending" : "");
+    const raw = String(h.client);
+    const name = raw.startsWith("generic:") ? raw.slice(8) : raw;
+    return `<div class="disc-item">
+      <span class="bdg ${cls}">${label}</span>
+      <span class="disc-name">${esc(name)}</span>
+      <span class="disc-path">${esc(h.path)}</span>
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `<div class="disc-head"><b>本机检测</b>
+      <span>${found.length} 个来源 · 已检查 ${checked.length} 处位置（${exists} 处存在）</span></div>
+    <div class="disc-list">${rows || `<div class="disc-item"><span class="disc-note">没有发现任何来源</span></div>`}</div>`;
+}
+
+function renderEmptyGuide(ov, disc){
+  const el = $("#emptyGuide");
+  if (!el) return;
+  const empty = !ov || !ov.calls;
+  el.hidden = !empty;
+  if (!empty) return;
+
+  const checked = (disc && disc.checked) || [];
+  const exists = checked.filter(c => c.exists).length;
+  const paths = checked.map(c =>
+    `<div><span class="${c.exists ? "ok" : "no"}">${c.exists ? "存在" : "未找到"}</span> ${esc(c.path)}</div>`
+  ).join("");
+
+  el.innerHTML = `<h3>还没有找到可统计的数据</h3>
+    <p>程序已自动检查本机 ${checked.length} 个位置，其中 ${exists} 个存在。若你刚安装客户端，先运行一次让它产生会话记录，再点右上角「重新扫描」。</p>
+    <div class="paths">${paths}</div>
+    <p class="muted">客户端装在非默认位置时，可用环境变量 TP_GENERIC_DIRS 指定它的数据目录（多个用分号分隔）。</p>`;
+}
+
 /* ---------- 扫描进度 ---------- */
 let scanPoll = null;       // 轮询 /api/health
 let scanTick = null;       // 本地计时器
@@ -1281,7 +1355,7 @@ async function load(){
   if (first) renderSkeleton();
 
   try{
-    const [ov, tr, heat, md, pj, ss, cr, hl, fxRate] = await Promise.all([
+    const [ov, tr, heat, md, pj, ss, cr, hl, fxRate, disc] = await Promise.all([
       getJSON(`/api/overview?days=${d}`),
       getJSON(`/api/trend?days=${d}`),
       getJSON(`/api/heatmap?days=365`),
@@ -1290,7 +1364,8 @@ async function load(){
       getJSON(`/api/sessions?days=${d}`),
       getJSON(`/api/credits`),
       getJSON(`/api/health`),
-      getJSON("/api/fx").catch(() => null)
+      getJSON("/api/fx").catch(() => null),
+      getJSON("/api/discovery").catch(() => null)
     ]);
     if (fxRate) state.fx = fxRate;
     state.trendData = tr;
@@ -1298,6 +1373,7 @@ async function load(){
     renderHeat(heat); renderModels(md); renderProjects(pj);
     renderSessions(ss); renderWB(cr); renderHealth(hl);
     applyScan(hl.scan); syncExport(d);
+    renderDiscovery(disc); renderEmptyGuide(ov, disc);
     $("#kpis").dataset.ready = "1";
     $("#builtTime").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN",{hour12:false});
   }catch(err){

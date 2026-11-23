@@ -257,6 +257,62 @@ def test_catalog(r: Runner) -> None:
     r.check("核实状态向下传递", verified_requires_provider)
 
 
+def test_discovery(r: Runner) -> None:
+    import sqlite3
+    import tempfile
+    from pathlib import Path as _P
+
+    from . import config, discovery
+
+    def multi_candidate() -> None:
+        base = _P(tempfile.mkdtemp())
+        (base / "b").mkdir()
+        _eq(config.first_existing([base / "a", base / "b"]).name, "b")
+        # 都不存在时返回首选，便于报错时展示预期路径
+        _eq(config.first_existing([base / "x", base / "y"]).name, "x")
+
+    def usage_signal() -> None:
+        root = _P(tempfile.mkdtemp())
+        sub = root / "sessions"
+        sub.mkdir()
+        (sub / "plain.jsonl").write_text('{"event":"click"}', encoding="utf-8")
+        ok, _ = discovery._has_usage_signal(root)
+        _assert(ok is False, "普通 jsonl 不应被识别为用量数据")
+        (sub / "real.jsonl").write_text(
+            '{"usage":{"input_tokens":12,"output_tokens":3}}', encoding="utf-8"
+        )
+        ok2, ev = discovery._has_usage_signal(root)
+        _assert(ok2 is True and bool(ev), "含 usage 的 jsonl 应被识别")
+
+    def sqlite_precision() -> None:
+        base = _P(tempfile.mkdtemp())
+        c = sqlite3.connect(base / "auth.db")
+        c.execute("CREATE TABLE a (name TEXT, token TEXT)")
+        c.commit()
+        c.close()
+        _assert(discovery._sqlite_has_tokens(base / "auth.db") is False,
+                "只有 token 列的凭据表不应被当成用量表")
+
+        c = sqlite3.connect(base / "usage.db")
+        c.execute("CREATE TABLE u (input_tokens INT, output_tokens INT)")
+        c.commit()
+        c.close()
+        _assert(discovery._sqlite_has_tokens(base / "usage.db") is True)
+
+    def report_shape() -> None:
+        rep = discovery.report()
+        for key in ("found", "checked", "roots", "summary"):
+            _assert(key in rep, f"报告缺少 {key}")
+        for item in rep["checked"]:
+            for key in ("client", "path", "exists"):
+                _assert(key in item)
+
+    r.check("路径多候选", multi_candidate)
+    r.check("usage 内容特征", usage_signal)
+    r.check("sqlite 精度判定", sqlite_precision)
+    r.check("探测报告结构", report_shape)
+
+
 def test_fx(r: Runner) -> None:
     from . import fx
 
@@ -478,7 +534,13 @@ def test_service(r: Runner) -> None:
         _assert("source" in d and "stale" in d)
 
     r.check("GET /api/blogs", blogs_api)
+    def discovery_api() -> None:
+        d = json.loads(fetch("/api/discovery"))
+        for key in ("found", "checked", "roots", "summary"):
+            _assert(key in d)
+
     r.check("GET /api/fx", fx_api)
+    r.check("GET /api/discovery", discovery_api)
 
 
 def test_recovery(r: Runner) -> None:
@@ -615,6 +677,8 @@ def main() -> int:
     test_limits(r)
     print("[故障恢复]")
     test_recovery(r)
+    print("[本机探测]")
+    test_discovery(r)
     print("[价格与动态]")
     test_catalog(r)
     test_fx(r)

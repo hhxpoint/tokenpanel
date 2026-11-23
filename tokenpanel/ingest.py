@@ -39,8 +39,9 @@ def generic_roots() -> list[tuple[Path, bool]]:
     candidates.extend((Path(p), True) for p in extra.split(os.pathsep) if p.strip())
     try:
         for h in discovery.discover():
-            if not h.supported:
-                candidates.append((Path(h.path), h.kind == "jsonl_dir"))
+            # 只扫已判定「可读取」的来源；仅发现（如纯日志目录）不扫，避免空转
+            if not h.supported and h.scannable and h.kind == "jsonl_dir":
+                candidates.append((Path(h.path), True))
     except Exception:
         pass
 

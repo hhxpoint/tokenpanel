@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, catalog, config, db, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
+from . import __version__, catalog, config, db, discovery, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -281,6 +281,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_sessions(int_q("days", 30), int_q("limit", 40)))
             if path == "/api/credits":
                 return self._json(_credits())
+            if path == "/api/discovery":
+                return self._json(discovery.report())
             if path == "/api/fx":
                 return self._json(fx.get(force=bool_q("refresh")))
             if path == "/api/catalog":

@@ -31,17 +31,64 @@ PRICING_PATH = Path(os.environ.get("TOKENPANEL_PRICING", APP_HOME / "pricing.jso
 CATALOG_PATH = Path(os.environ.get("TOKENPANEL_CATALOG", APP_HOME / "catalog.json"))
 BLOG_CACHE = DATA_DIR / "blogs.json"
 
-# 各客户端数据源位置。用环境变量覆盖是为了测试时能指向样本目录。
+# 平台应用数据根目录（同一份代码在三大平台都能用）
+_APPDATA = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
+_LAPPDATA = Path(os.environ.get("LOCALAPPDATA", HOME / "AppData" / "Local"))
+_APP_SUPPORT = HOME / "Library" / "Application Support"     # macOS
+_XDG_DATA = HOME / ".local" / "share"                        # Linux
+_XDG_CONFIG = HOME / ".config"
+
+
+def first_existing(candidates: list[Path]) -> Path:
+    """按优先级返回第一个存在的路径；都不存在时返回第一个候选（便于报错时展示）。
+
+    换机器最容易出的问题是「客户端在哪里」这件事因平台而异，所以每个数据源
+    都给多个候选位置，而不是写死一条路径。
+    """
+    for path in candidates:
+        try:
+            if path.exists():
+                return path
+        except OSError:
+            continue
+    return candidates[0]
+
+
+def _source(env: str, candidates: list[Path]) -> Path:
+    override = os.environ.get(env, "").strip()
+    if override:
+        return Path(override)
+    return first_existing(candidates)
+
+
+# 各客户端数据源位置：环境变量 > 第一个真实存在的位置 > 首选项
 SOURCES = {
-    "claude": Path(os.environ.get("TP_CLAUDE_DIR", HOME / ".claude" / "projects")),
-    "dsh": Path(os.environ.get("TP_DSH_DIR", HOME / ".dsh" / "sessions")),
-    "codex": Path(os.environ.get("TP_CODEX_DIR", HOME / ".codex" / "sessions")),
-    "opencode": Path(
-        os.environ.get("TP_OPENCODE_DB", HOME / ".local" / "share" / "opencode" / "opencode.db")
-    ),
-    "workbuddy": Path(
-        os.environ.get("TP_WORKBUDDY_DB", HOME / ".workbuddy" / "workbuddy.db")
-    ),
+    "claude": _source("TP_CLAUDE_DIR", [
+        HOME / ".claude" / "projects",
+        _XDG_CONFIG / "claude" / "projects",
+        _APP_SUPPORT / "Claude" / "projects",
+    ]),
+    "dsh": _source("TP_DSH_DIR", [
+        HOME / ".dsh" / "sessions",
+        _XDG_DATA / "dsh" / "sessions",
+        _APP_SUPPORT / "dsh" / "sessions",
+    ]),
+    "codex": _source("TP_CODEX_DIR", [
+        HOME / ".codex" / "sessions",
+        _XDG_CONFIG / "codex" / "sessions",
+        _APP_SUPPORT / "codex" / "sessions",
+    ]),
+    "opencode": _source("TP_OPENCODE_DB", [
+        _XDG_DATA / "opencode" / "opencode.db",
+        _APP_SUPPORT / "opencode" / "opencode.db",
+        _APPDATA / "opencode" / "opencode.db",
+        HOME / ".opencode" / "opencode.db",
+    ]),
+    "workbuddy": _source("TP_WORKBUDDY_DB", [
+        HOME / ".workbuddy" / "workbuddy.db",
+        _APP_SUPPORT / "WorkBuddy" / "workbuddy.db",
+        _APPDATA / "WorkBuddy" / "workbuddy.db",
+    ]),
 }
 
 # 全量重扫的阈值：单文件超过这个大小就跳过（防止误读巨大文件卡死）。
