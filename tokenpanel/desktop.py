@@ -85,14 +85,22 @@ def _wait_port(port: int, timeout: float = 12.0) -> bool:
 
 
 def open_window(url: str, width: int = 1440, height: int = 940) -> bool:
-    """用 app 模式打开独立窗口，失败则返回 False。"""
+    """用 app 模式打开独立窗口，失败则返回 False。
+
+    每种浏览器各用一个独立 profile：共用同一目录时，后启动的浏览器会去接管前一个的
+    数据目录，前一个实例还残留就会变成「双击没反应」。分开之后互不干扰。
+    """
     browsers = _browser_candidates()
     if not browsers:
         return False
-    # 独立 profile，保证是独立窗口且不受用户已有浏览器实例影响
-    profile = Path(tempfile.gettempdir()) / "tokenpanel-window"
-    profile.mkdir(parents=True, exist_ok=True)
+    root = Path(tempfile.gettempdir())
     for exe in browsers:
+        tag = "edge" if "msedge" in exe.name.lower() else "chrome"
+        profile = root / f"tokenpanel-window-{tag}"
+        try:
+            profile.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
         try:
             subprocess.Popen(
                 [
@@ -183,8 +191,18 @@ def run(port: int = 8765, rescan: bool = True) -> None:
 
     # 先开窗口（页面显示骨架屏），扫描放到后台，避免用户干等
     if not open_window(url):
-        print(f"未找到 Edge/Chrome，改用默认浏览器：{url}")
-        webbrowser.open(url)
+        print(f"未找到可用的 Edge/Chrome，改用默认浏览器：{url}")
+        opened = False
+        try:
+            opened = webbrowser.open(url)
+        except Exception:
+            opened = False
+        if not opened:
+            alert(
+                "没能自动打开窗口。\n\n"
+                f"请手动在浏览器访问：{url}\n"
+                "服务已经在后台运行，关掉浏览器后再双击本程序即可重开。"
+            )
 
     if rescan:
         threading.Thread(target=_background_scan, daemon=True).start()

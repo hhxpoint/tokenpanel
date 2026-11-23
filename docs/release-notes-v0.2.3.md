@@ -28,10 +28,14 @@
 - 用 Chrome DevTools Protocol 派发真实鼠标轨迹，截图核对：光环为 1px 细线、环内保持白底、轨迹上可见离散光点、无大面积橙色雾状区域
 - 控制台无报错，`#fx` 画布有非透明像素但总量极低（约 1.3k 个，含抗锯齿边缘）
 
+## 顺带修掉的启动问题
+
+Edge 与 Chrome 原先共用同一个 `--user-data-dir`。一旦有残留实例占着那个目录，新进程会把请求转交给它然后立刻退出——用户看到的就是「双击没反应」。现在两种浏览器各用独立 profile，互不接管；真的打不开时也会先试默认浏览器，再弹窗给出可手动访问的地址。
+
 ## 下载
 
 - `TokenPanel.exe`（Windows 10/11 x64，单文件，10.9 MB）
 - `SHA256SUMS.txt`
 - `verify.bat`
 
-SHA256：`d3c1d2b47588907ab5beb0e8ccaedf274b9c3c89e644685352273d0b4ca2c15c`
+SHA256：`00635645fca06e06db32148bdcd9c0d2db392f05921a3edf34cb8e64b62f16c6`
