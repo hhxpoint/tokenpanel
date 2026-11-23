@@ -10,6 +10,7 @@ echo.
 
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name TokenPanel ^
+  --icon "assets\icon.ico" ^
   --add-data "tokenpanel\web;tokenpanel\web" ^
   --add-data "pricing.json;." ^
   launch.py
