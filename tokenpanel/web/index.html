@@ -52,6 +52,13 @@
     background:linear-gradient(145deg,#e2622f,#b8401c);
     box-shadow:0 2px 6px -1px rgba(184,64,28,.4), inset 0 1px 0 rgba(255,255,255,.28);
     display:grid;place-items:center;
+    animation:breathe 6.5s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{box-shadow:0 2px 6px -1px rgba(184,64,28,.4), inset 0 1px 0 rgba(255,255,255,.28),
+      0 0 0 0 rgba(226,98,47,.28)}
+    50%{box-shadow:0 2px 6px -1px rgba(184,64,28,.4), inset 0 1px 0 rgba(255,255,255,.28),
+      0 0 0 7px rgba(226,98,47,0)}
   }
   .mark svg{width:16px;height:16px;display:block}
   .brand h1{font-size:16.5px;font-weight:650;letter-spacing:-.35px;margin:0;white-space:nowrap}
@@ -90,7 +97,8 @@
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ---------- 入场 ---------- */
-  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes rise{from{opacity:0;transform:translateY(12px);filter:blur(3px)}
+    to{opacity:1;transform:none;filter:blur(0)}}
   .rise{animation:rise var(--dur) var(--ease) both}
   .d1{animation-delay:.04s}.d2{animation-delay:.08s}.d3{animation-delay:.12s}
   .d4{animation-delay:.16s}.d5{animation-delay:.2s}.d6{animation-delay:.24s}
@@ -221,9 +229,14 @@
   .share-foot .vl{display:block;font-size:15px;font-weight:640;letter-spacing:-.3px;
     font-variant-numeric:tabular-nums}
   .card{
+    position:relative;
     background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
     padding:16px 18px 18px;box-shadow:var(--shadow-md);min-width:0;
-    transition:box-shadow .25s var(--ease);
+    transition:box-shadow .3s var(--ease),border-color .3s var(--ease),transform .3s var(--ease);
+  }
+  .card:hover{
+    border-color:rgba(217,84,43,.22);
+    box-shadow:0 1px 2px rgba(24,22,19,.04), 0 12px 28px -14px rgba(217,84,43,.22);
   }
   .card:hover{box-shadow:var(--shadow-lg)}
   .chead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:2px}
@@ -284,6 +297,29 @@
   .cell.l3{background:#e2855f}.cell.l4{background:#c25a30}.cell.l5{background:#8f3713}
   @keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
   .hstats{display:flex;flex-wrap:wrap;gap:26px;margin-top:16px}
+  #projects{display:flex;flex-direction:column;height:100%}
+  .rank-foot{margin-top:auto;padding-top:12px;border-top:1px dashed var(--border);
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    font-size:11.5px;color:var(--muted)}
+  .rank-foot b{color:var(--text-2);font-weight:600;font-variant-numeric:tabular-nums}
+  .dow-wrap{margin-top:auto;padding-top:16px}
+  .dow-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    margin-bottom:10px;padding-top:12px;border-top:1px dashed var(--border)}
+  .dow-head b{font-size:11.5px;font-weight:600;color:var(--text-2)}
+  .dow-head span{font-size:10.5px;color:var(--muted)}
+  .dow{display:flex;align-items:flex-end;gap:8px}
+  .dow .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+  .dow .dtrack{height:54px;width:100%;display:flex;align-items:flex-end;justify-content:center;background:none}
+  .dow .bar{
+    width:72%;max-width:22px;border-radius:5px 5px 3px 3px;
+    background:linear-gradient(180deg,#f0a173,#d9542b);
+    transform-origin:bottom;
+    animation:dowgrow .75s var(--ease) both;
+  }
+  .dow .col.top .bar{background:linear-gradient(180deg,#f6b98f,#b8431c)}
+  .dow .lb{font-size:10px;color:var(--muted);white-space:nowrap}
+  .dow .col.top .lb{color:var(--text-2);font-weight:600}
+  @keyframes dowgrow{from{transform:scaleY(.08);opacity:.35}to{transform:scaleY(1);opacity:1}}
   .hstats .lb{font-size:11.5px;color:var(--muted)}
   .hstats .vl{font-size:17px;font-weight:650;letter-spacing:-.4px;margin-top:2px;
     font-variant-numeric:tabular-nums}
@@ -387,6 +423,23 @@
   .disc-path{color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;
     font-size:10.5px;word-break:break-all}
   .disc-note{color:var(--muted);font-size:10.5px}
+
+  /* ---------- 光标光晕 ---------- */
+  .aurora{
+    position:fixed;left:0;top:0;width:520px;height:520px;border-radius:50%;
+    pointer-events:none;z-index:0;opacity:0;
+    background:radial-gradient(circle,
+      rgba(255,150,90,.20) 0%,
+      rgba(217,84,43,.10) 38%,
+      rgba(217,84,43,.035) 58%,
+      transparent 72%);
+    filter:blur(18px);
+    transition:opacity .7s var(--ease);
+    transform:translate3d(-9999px,-9999px,0);
+    will-change:transform;
+  }
+  .aurora.on{opacity:1}
+  .wrap{position:relative;z-index:1}
 
   /* ---------- 栏目切换 ---------- */
   .tabs{display:flex;gap:4px;margin:14px 0 12px;padding:3px;background:var(--surface-2);
@@ -496,7 +549,9 @@
 
   /* ---------- 尊重系统的减少动效偏好 ---------- */
   @media (prefers-reduced-motion:reduce){
-    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    html{scroll-behavior:smooth}
+  :focus-visible{outline:2px solid rgba(217,84,43,.55);outline-offset:2px;border-radius:6px}
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
       transition-duration:.001ms!important}
   }
 </style>
@@ -580,7 +635,7 @@
     </div>
   </div>
 
-  <div class="grid rise d3">
+  <div class="grid stretch rise d3">
     <div class="card heatcard" id="heatCard">
       <div class="chead">
         <div><h3>近 365 天活跃度</h3><div class="hint">每格一天 · 颜色越深消耗越高</div></div>
@@ -594,6 +649,10 @@
         </div>
       </div>
       <div class="hstats" id="heatStats"></div>
+      <div class="dow-wrap">
+        <div class="dow-head"><b>星期分布</b><span>按总消耗 · 深色为最高</span></div>
+        <div class="dow" id="dow"></div>
+      </div>
     </div>
     <div class="card">
       <div class="chead"><div><h3>WorkBuddy 计费快照</h3><div class="hint">会话级快照，credit 不可跨会话累加</div></div></div>
@@ -601,7 +660,7 @@
     </div>
   </div>
 
-  <div class="grid rise d4">
+  <div class="grid stretch rise d4">
     <div class="card">
       <div class="chead"><div><h3>模型用量</h3><div class="hint">按 token 总量排序</div></div></div>
       <div class="tablewrap">
@@ -709,6 +768,7 @@
   </footer>
 </div>
 
+<div class="aurora" id="aurora" aria-hidden="true"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1058,6 +1118,35 @@ function renderHeat(h){
     stat("日均（活跃日）", fmt(avg)) +
     stat("单日峰值", fmt(peak)) +
     stat("最长连续", `${best} 天`, cur > 1 ? `当前连续 ${cur} 天` : "");
+
+  renderDow(days, vals);
+}
+
+/* 星期分布：把一年的消耗按周几聚合，补满卡片底部并给出新视角 */
+function renderDow(days, vals){
+  const el = $("#dow");
+  if (!el || !days.length) return;
+
+  const names = ["日", "一", "二", "三", "四", "五", "六"];
+  const sums = new Array(7).fill(0);
+  days.forEach((d, i) => {
+    const wd = new Date(d + "T00:00:00").getDay();
+    sums[wd] += vals[i] || 0;
+  });
+
+  // 按 周一 → 周日 的顺序展示
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const max = Math.max(...sums, 1);
+  const top = sums.indexOf(max);
+
+  el.innerHTML = order.map((wd, idx) => {
+    const v = sums[wd];
+    const pct = Math.max(5, Math.round(v / max * 100));
+    return `<div class="col ${wd === top ? "top" : ""}" title="${names[wd]} · ${fmt(v)} tokens">
+      <div class="dtrack"><div class="bar" style="height:${pct}%;animation-delay:${REDUCE ? 0 : (idx * 0.04).toFixed(2)}s"></div></div>
+      <div class="lb">${names[wd]}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderModels(rows){
@@ -1077,7 +1166,7 @@ function shortName(p){
   return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : String(p);
 }
 
-function renderProjects(rows){
+function renderProjects(rows, grandTotal){
   const el = $("#projects");
   if (!rows.length){ el.innerHTML = emptyState("暂无数据"); return; }
   const max = Math.max(...rows.map(r=>r.tokens||0), 1);
@@ -1089,7 +1178,19 @@ function renderProjects(rows){
       <div class="track"><i style="width:${pct.toFixed(2)}%;background:${colorOf(r.client)};
         animation-delay:${REDUCE?0:0.04*i}s"></i></div>
     </div>`;
-  }).join("");
+  }).join("") + (() => {
+    const shown = rows.slice(0, 10);
+    const top = shown.reduce((sum, r) => sum + (r.tokens || 0), 0);
+    const total = Number(grandTotal) || 0;
+    const share = total > 0 ? top / total * 100 : null;
+    const shareText = share === null
+      ? ""
+      : ` · 占 ${share >= 99.95 ? "100" : share.toFixed(1)}%`;
+    return `<div class="rank-foot">
+      <span>前 ${shown.length} 个项目</span>
+      <span><b>${fmt(top)}</b> tokens${shareText}</span>
+    </div>`;
+  })();
 }
 
 const SORTS = {
@@ -1370,7 +1471,7 @@ async function load(){
     if (fxRate) state.fx = fxRate;
     state.trendData = tr;
     renderKpis(ov); renderLedger(ov); renderTrend(tr); renderShare(ov);
-    renderHeat(heat); renderModels(md); renderProjects(pj);
+    renderHeat(heat); renderModels(md); renderProjects(pj, ov.tokens);
     renderSessions(ss); renderWB(cr); renderHealth(hl);
     applyScan(hl.scan); syncExport(d);
     renderDiscovery(disc); renderEmptyGuide(ov, disc);
@@ -1769,6 +1870,39 @@ $("#blogFeeds").addEventListener("click", e => {
 
 initViews();
 if (document.body.dataset.view !== "dash") switchView(document.body.dataset.view);
+
+/* 光标光晕：跟随指针的暖色柔光。减少动效或触屏设备时自动关闭 */
+(function aurora(){
+  const el = document.getElementById("aurora");
+  if (!el || REDUCE) return;
+  if (window.matchMedia && window.matchMedia("(hover: none)").matches) return;
+
+  const R = 260;                       // 半径，与 CSS 的 520px 对应
+  let tx = window.innerWidth * 0.5, ty = window.innerHeight * 0.28;
+  let cx = tx, cy = ty, raf = 0;
+
+  function tick(){
+    cx += (tx - cx) * 0.12;
+    cy += (ty - cy) * 0.12;
+    el.style.transform = `translate3d(${cx - R}px, ${cy - R}px, 0)`;
+    if (Math.abs(tx - cx) > 0.6 || Math.abs(ty - cy) > 0.6){
+      raf = requestAnimationFrame(tick);
+    } else {
+      raf = 0;
+    }
+  }
+
+  window.addEventListener("pointermove", e => {
+    tx = e.clientX;
+    ty = e.clientY;
+    el.classList.add("on");
+    el.style.transform = `translate3d(${tx - R}px, ${ty - R}px, 0)`;
+    if (!raf) raf = requestAnimationFrame(tick);
+  }, {passive: true});
+
+  document.addEventListener("pointerleave", () => el.classList.remove("on"));
+  window.addEventListener("blur", () => el.classList.remove("on"));
+})();
 
 /* 心跳：让服务知道窗口还开着；关闭后服务会自动退出 */
 (function heartbeat(){
