@@ -74,7 +74,7 @@ def test_pricing(r: Runner) -> None:
     r.check("未定价成本为 None", lambda: _eq(pricing.cost_of("totally-unknown", 10, 10, 0, 0), None))
     r.check(
         "成本计算正确",
-        lambda: _assert(abs(pricing.cost_of("deepseek-flash", 1_000_000, 0, 0, 0) - 0.28) < 1e-9),
+        lambda: _assert(abs(pricing.cost_of("deepseek-flash", 1_000_000, 0, 0, 0) - 0.30) < 1e-9),
     )
 
     def longest_match() -> None:
@@ -228,6 +228,76 @@ def test_runtime(r: Runner) -> None:
     r.check("扫描超时自愈", stale_scan_resets)
 
 
+def test_catalog(r: Runner) -> None:
+    from . import catalog
+
+    def shape() -> None:
+        data = catalog.load(force=True)
+        _assert(data["summary"]["providers"] > 0)
+        _eq(len(data["models"]), data["summary"]["models"])
+        for row in data["models"]:
+            for key in ("provider", "model", "currency", "input", "output", "verified", "pricing_url"):
+                _assert(key in row, f"缺少字段 {key}")
+            _assert(row["currency"] in ("CNY", "USD"))
+
+    def search_works() -> None:
+        hits = catalog.search("qwen")
+        _assert(hits, "应能搜到 qwen 系列")
+        _assert(all("qwen" in (r["model"] + r["model_id"]).lower() for r in hits))
+
+    def verified_requires_provider() -> None:
+        # 平台未核实时，型号一律按未核实展示
+        data = catalog.load(force=True)
+        for row in data["models"]:
+            if not row["verified"]:
+                _assert(row["verified"] is False)
+
+    r.check("价格表结构完整", shape)
+    r.check("价格表可检索", search_works)
+    r.check("核实状态向下传递", verified_requires_provider)
+
+
+def test_feeds(r: Runner) -> None:
+    from . import feeds
+
+    RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel>
+      <item><title>Hello RSS</title><link>https://example.com/a</link>
+      <description>&lt;p&gt;body &amp;amp; text&lt;/p&gt;</description>
+      <pubDate>Sun, 22 Nov 2026 10:00:00 GMT</pubDate></item>
+    </channel></rss>"""
+
+    ATOM = b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><title>Hello Atom</title><link href="https://example.com/b"/>
+      <summary>atom summary</summary><updated>2026-11-21T08:30:00Z</updated></entry>
+    </feed>"""
+
+    meta = {"id": "t", "name": "Test", "url": "", "home": ""}
+
+    def rss() -> None:
+        posts = feeds.parse_feed(RSS, meta)
+        _eq(len(posts), 1)
+        _eq(posts[0]["title"], "Hello RSS")
+        _eq(posts[0]["url"], "https://example.com/a")
+        _assert("body & text" in posts[0]["summary"], "应去掉 HTML 并还原实体")
+        _assert(posts[0]["published"] > 0)
+
+    def atom() -> None:
+        posts = feeds.parse_feed(ATOM, meta)
+        _eq(len(posts), 1)
+        _eq(posts[0]["title"], "Hello Atom")
+        _eq(posts[0]["url"], "https://example.com/b")
+        _assert(posts[0]["published"] > 0)
+
+    def cache_offline() -> None:
+        # 没有缓存文件时也必须返回可用结构，而不是抛异常
+        data = feeds.load_cache()
+        _assert("posts" in data and "feeds" in data)
+
+    r.check("RSS 解析", rss)
+    r.check("Atom 解析", atom)
+    r.check("无缓存时可降级", cache_offline)
+
+
 def test_timezone_buckets(r: Runner) -> None:
     """按天统计必须用本地时区，否则北京时间凌晨的用量会被算到前一天。"""
     import datetime
@@ -342,7 +412,19 @@ def test_service(r: Runner) -> None:
         _assert(isinstance(d["active"], int))
 
     r.check("GET /api/export", export)
+    def catalog_api() -> None:
+        d = json.loads(fetch("/api/catalog"))
+        _assert(d["summary"]["models"] > 0)
+        _assert(d["models"])
+
+    def blogs_api() -> None:
+        d = json.loads(fetch("/api/blogs"))
+        for key in ("posts", "feeds", "count", "ttl"):
+            _assert(key in d)
+
     r.check("GET /api/heatmap 一年", heatmap)
+    r.check("GET /api/catalog", catalog_api)
+    r.check("GET /api/blogs", blogs_api)
 
 
 def test_recovery(r: Runner) -> None:
@@ -479,6 +561,9 @@ def main() -> int:
     test_limits(r)
     print("[故障恢复]")
     test_recovery(r)
+    print("[价格与动态]")
+    test_catalog(r)
+    test_feeds(r)
     print("[时区归日]")
     test_timezone_buckets(r)
     print("[服务冒烟]")

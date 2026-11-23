@@ -13,6 +13,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --icon "assets\icon.ico" ^
   --add-data "tokenpanel\web;tokenpanel\web" ^
   --add-data "pricing.json;." ^
+  --add-data "catalog.json;." ^
   launch.py
 
 if errorlevel 1 goto fail

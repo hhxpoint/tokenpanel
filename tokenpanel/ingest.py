@@ -162,7 +162,9 @@ def _run_locked(
 
         runtime.scan_phase("pricing")
         runtime.scan_note("按价格表回算成本…")
-        priced = pricing.recalc(conn) if recalc_all else _fill_missing_cost(conn)
+        # 始终按当前价格表重算：价格表更新后无需用户额外操作即可生效
+        # pricing.recalc 内部会跳过 cost_src='native' 的记录
+        priced = pricing.recalc(conn)
 
     runtime.scan_note(f"完成：共新增 {total_added} 条")
     runtime.scan_finished(total_added)

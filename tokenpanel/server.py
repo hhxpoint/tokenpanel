@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import __version__, config, db, doctor, exporter, ingest, pricing, runtime, updater
+from . import __version__, catalog, config, db, doctor, exporter, feeds, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -147,6 +147,38 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
             )
             series[c]["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
     return JSONResponse({"days": days_set, "series": series})
+
+
+@app.get("/api/catalog")
+def catalog_api() -> JSONResponse:
+    return JSONResponse(catalog.load())
+
+
+@app.get("/api/blogs")
+def blogs() -> JSONResponse:
+    data = feeds.load_cache()
+    return JSONResponse({
+        "fetched_at": data.get("fetched_at", 0),
+        "feeds": data.get("feeds", []),
+        "posts": data.get("posts", []),
+        "count": len(data.get("posts", [])),
+        "ttl": feeds.TTL_SEC,
+    })
+
+
+@app.post("/api/blogs/refresh")
+def blogs_refresh() -> JSONResponse:
+    try:
+        data = feeds.refresh(force=True)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    return JSONResponse({
+        "fetched_at": data.get("fetched_at", 0),
+        "feeds": data.get("feeds", []),
+        "posts": data.get("posts", []),
+        "count": len(data.get("posts", [])),
+        "ttl": feeds.TTL_SEC,
+    })
 
 
 @app.get("/api/heatmap")

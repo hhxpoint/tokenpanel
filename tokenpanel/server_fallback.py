@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, config, db, doctor, exporter, ingest, pricing, runtime, updater
+from . import __version__, catalog, config, db, doctor, exporter, feeds, ingest, pricing, runtime, updater
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -278,6 +278,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_sessions(int_q("days", 30), int_q("limit", 40)))
             if path == "/api/credits":
                 return self._json(_credits())
+            if path == "/api/catalog":
+                return self._json(catalog.load())
+            if path == "/api/blogs":
+                data = feeds.load_cache()
+                return self._json({
+                    "fetched_at": data.get("fetched_at", 0),
+                    "feeds": data.get("feeds", []),
+                    "posts": data.get("posts", []),
+                    "count": len(data.get("posts", [])),
+                    "ttl": feeds.TTL_SEC,
+                })
             if path == "/api/heatmap":
                 return self._json(_heatmap(int_q("days", 365)))
             if path == "/api/health":
@@ -304,6 +315,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if parsed.path == "/api/blogs/refresh":
+            try:
+                data = feeds.refresh(force=True)
+            except Exception as exc:
+                return self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
+            return self._json({
+                "fetched_at": data.get("fetched_at", 0),
+                "feeds": data.get("feeds", []),
+                "posts": data.get("posts", []),
+                "count": len(data.get("posts", [])),
+                "ttl": feeds.TTL_SEC,
+            })
         if parsed.path == "/api/heartbeat":
             runtime.beat()
             return self._json({"ok": True})

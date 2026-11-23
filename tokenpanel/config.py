@@ -28,6 +28,8 @@ WEB_DIR = (BUNDLE / "tokenpanel" / "web") if FROZEN else (Path(__file__).resolve
 DATA_DIR = Path(os.environ.get("TOKENPANEL_DATA", APP_HOME / "data"))
 DB_PATH = DATA_DIR / "tokenpanel.db"
 PRICING_PATH = Path(os.environ.get("TOKENPANEL_PRICING", APP_HOME / "pricing.json"))
+CATALOG_PATH = Path(os.environ.get("TOKENPANEL_CATALOG", APP_HOME / "catalog.json"))
+BLOG_CACHE = DATA_DIR / "blogs.json"
 
 # 各客户端数据源位置。用环境变量覆盖是为了测试时能指向样本目录。
 SOURCES = {
@@ -72,9 +74,35 @@ def ensure_dirs() -> None:
             shutil.copyfile(bundled, PRICING_PATH)
         except OSError:
             pass
+        _sync_catalog()
         return
     # 已存在：只补充新版本新增的模型，绝不覆盖用户改过的价格
     _merge_pricing(bundled, PRICING_PATH)
+    _sync_catalog()
+
+
+def _sync_catalog() -> None:
+    """价格总表随版本更新：内置版本更新时覆盖，否则保留本地。
+
+    与 pricing.json 不同，catalog.json 是只读参考数据，不存在「用户自定义价格」，
+    所以按 _meta.updated 比较新旧，新版本直接覆盖，保证价格不会停留在旧版。
+    """
+    import json
+
+    bundled = BUNDLE / "catalog.json"
+    if not bundled.exists() or bundled.resolve() == CATALOG_PATH.resolve():
+        return
+    target = Path(CATALOG_PATH)
+    try:
+        if not target.exists():
+            shutil.copyfile(bundled, target)
+            return
+        new_meta = json.loads(bundled.read_text(encoding="utf-8")).get("_meta", {})
+        old_meta = json.loads(target.read_text(encoding="utf-8")).get("_meta", {})
+        if str(new_meta.get("updated", "")) > str(old_meta.get("updated", "")):
+            shutil.copyfile(bundled, target)
+    except (OSError, json.JSONDecodeError):
+        pass
 
 
 def _merge_pricing(bundled: Path, user: Path) -> None:
