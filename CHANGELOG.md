@@ -4,6 +4,16 @@
 
 ## v0.1.6 — 2026-11-22
 
+### 安全与分发
+
+- **发布 SHA256 校验值**：每个 Release 附带 `SHA256SUMS.txt`，并提供双击即用的 `verify.bat`（已实测正常与篡改两条路径）
+- **新增 `docs/signing.md`**：说明签名现状、SmartScreen 真实机制、免费签名方案的门槛
+- **新增代码签名策略章节**：供 SignPath Foundation 等免费渠道申请时使用
+- 落地页新增「安全与完整性」区块，说明弹窗成因、校验方法与去除「来自 Internet」标记的步骤
+
+> 核实结论：EV 证书自 2023 年起不再绕过 SmartScreen，OV/EV 首次下载一样弹窗；可信代码签名证书已强制硬件密钥，公开渠道无免费证书。买证书无法解决该问题，因此改为把校验与说明做到位。
+
+
 ### 新增
 
 - **补全三个模型价格**：MiMo-V2.5-Pro-UltraSpeed（$1.30 / $2.61）、MiMo-V2.5-Pro（$0.435 / $0.87）、Big Pickle（OpenCode 免费模型，$0）。价格来源记录在 `pricing.json` 的 `_sources` 字段
