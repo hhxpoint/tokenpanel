@@ -67,9 +67,9 @@ exe 没有做代码签名，首次运行会弹这个提示。需要说明的是�
 - **可自更新** — 页脚一键检查新版本，平时不联网
 - **价格对比** — 22 个型号的官网单价，标注核实状态与来源
 - **双币种** — 每个单价附另一种货币换算，汇率取自公开接口并带降级策略
-- **技术动态** — 聚合 OpenAI / Qwen / NVIDIA / BAIR 官方博客
+- **技术动态** — 26 个官方源：Anthropic、Kimi、MiniMax、DeepSeek、OpenAI、Qwen 等官方博客 + arXiv 论文，按厂商与类型筛选
 - **自愈** — 数据库损坏自动隔离重建；目录不可写会明确告知
-- **自检** — 28 项内建断言覆盖计量、解析、去重、计价，升级后可一键回归
+- **自检** — 75 项内建断言覆盖计量、解析、去重、计价、聚合，升级后可一键回归
 
 ## 支持的客户端
 
@@ -243,12 +243,32 @@ Codex             2     6285      378    1.42万        0    2.09万          -
 
 ### 技术动态
 
-聚合官方博客 RSS，本地缓存后离线也能看：
+只收官方渠道：要么是官方博客的 RSS / Atom，要么直接解析官方博客列表页，再加上 arXiv 的官方 API。不碰第三方转载站、聚合站、爬虫镜像。
 
-- OpenAI、Qwen、NVIDIA、BAIR
-- 每个源取最新 18 篇后合并，避免大 feed 淹没其他来源
-- 支持按来源筛选，点卡片直达原文
-- 只有点「抓取最新」（或首次打开无缓存）时才联网
+**26 个源，分三类**
+
+| 类型 | 来源 |
+| --- | --- |
+| 大模型厂商 | Anthropic、Kimi / Moonshot、MiniMax、DeepSeek、OpenAI、Qwen |
+| 研究与工程 | NVIDIA、Microsoft Research、Google DeepMind、Google AI、Meta AI、Mistral、xAI、Cohere、Hugging Face、Together AI、MIT News、Apple ML、TensorFlow、AWS ML、Perplexity |
+| 论文 | arXiv cs.CL、arXiv cs.LG、arXiv 国产模型论文（Kimi K2 / MiniMax-M2 / DeepSeek-V3 / Qwen3 / Hunyuan / GLM-4.5 / ERNIE）、arXiv 海外模型论文（Claude / Gemini / GPT-5 / Llama / Mistral / Grok-4） |
+
+海外源在国内网络下经常连不上，这是常态而不是故障：连不上就标「离线」，**保留上一次抓到的内容**，界面照常可读。抓取状态里会显示「17 / 26 个来源在线」。
+
+**抓取策略**
+
+- 有 RSS 的走 RSS；没有的（Anthropic、Kimi、MiniMax、DeepSeek）解析官方列表页，只认路径前缀 + 像标题的文本，站点改版也不至于立刻失效
+- 每个源取最新 40 条，全局按「天」分组后同一天内官方博客优先于论文，避免首屏被 arXiv 日更淹没
+- 列表页不给摘要的，回访详情页取 `og:description` 或正文首段；站点通用的那句介绍会被识别并丢弃，绝不拿它冒充每篇文章的摘要
+- 单源失败不影响其他源；增量合并按 URL 去重，某次抓取失败不会把已有内容清空
+- 整个抓取有硬预算（主源 13 秒 + 海外源 5 秒 + 重试 6 秒），慢源不会拖到 40 秒
+- 缓存 30 分钟，期间打开页面直接读本地；只有点「抓取最新」才联网
+
+**界面**
+
+- 顶部「厂商最新」：Anthropic / Kimi / MiniMax / DeepSeek / OpenAI / Qwen 各取最新一篇，优先挑技术类标题
+- 全部 / 博客 / 论文三段切换，按来源筛选，卡片带品牌色标与机构标签
+- 默认显示 60 条，可「加载更多」；论文卡片标明识别出的机构（Anthropic、Moonshot、DeepSeek、Google 等）
 
 ## 换一台电脑
 

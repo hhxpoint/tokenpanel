@@ -397,9 +397,52 @@ def test_feeds(r: Runner) -> None:
         data = feeds.load_cache()
         _assert("posts" in data and "feeds" in data)
 
+    def html_extract() -> None:
+        page = (
+            '<html><body>'
+            '<a href="/blog/">博客</a>'
+            '<a href="/blog/kimi-k3"><h3>Kimi K3 技术博客</h3><span>2026-10-24</span></a>'
+            '<a href="/en/blog/kimi-k3"><h3>Kimi K3</h3></a>'
+            '<a href="/about">关于我们</a>'
+            '</body></html>'
+        )
+        feed = {
+            "id": "x", "name": "X", "url": "https://ex.com/blog", "home": "",
+            "prefixes": ["/blog/"], "dedupe_slug": True,
+        }
+        got = feeds.extract_html(page, feed)
+        _eq(len(got), 1)
+        _eq(got[0]["title"], "Kimi K3 技术博客")
+        _assert(got[0]["published"] > 0, "应识别 2026-10-24")
+
+    def org_tag() -> None:
+        _eq(feeds._tag_org("Kimi K3 Technical Report"), "Moonshot")
+        _eq(feeds._tag_org("Minimax-Optimal Regret Bounds"), "")
+        _eq(feeds._tag_org("Claude 4 System Card"), "Anthropic")
+
+    def merge_keep() -> None:
+        cached = {"posts": [{"title": "old", "url": "u1", "source_id": "a",
+                             "kind": "blog", "published": 1}]}
+        fresh = [{"title": "new", "url": "u2", "source_id": "b",
+                  "kind": "blog", "published": 2}]
+        out = feeds._merge(cached, fresh)
+        _eq(len(out), 2)
+        _eq(out[0]["url"], "u2")
+
+    def blog_first() -> None:
+        out = feeds._merge({"posts": []}, [
+            {"title": "p", "url": "p", "kind": "paper", "published": 1000},
+            {"title": "b", "url": "b", "kind": "blog", "published": 900},
+        ])
+        _eq(out[0]["kind"], "blog")
+
     r.check("RSS 解析", rss)
     r.check("Atom 解析", atom)
     r.check("无缓存时可降级", cache_offline)
+    r.check("官网列表页提取", html_extract)
+    r.check("论文机构识别", org_tag)
+    r.check("增量合并不丢内容", merge_keep)
+    r.check("同日博客优先", blog_first)
 
 
 def test_timezone_buckets(r: Runner) -> None:

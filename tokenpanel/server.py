@@ -172,6 +172,7 @@ def blogs() -> JSONResponse:
         "feeds": data.get("feeds", []),
         "posts": data.get("posts", []),
         "count": len(data.get("posts", [])),
+        "stats": data.get("stats", {}),
         "ttl": feeds.TTL_SEC,
     })
 
@@ -187,6 +188,7 @@ def blogs_refresh() -> JSONResponse:
         "feeds": data.get("feeds", []),
         "posts": data.get("posts", []),
         "count": len(data.get("posts", [])),
+        "stats": data.get("stats", {}),
         "ttl": feeds.TTL_SEC,
     })
 

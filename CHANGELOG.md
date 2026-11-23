@@ -2,6 +2,33 @@
 
 遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## v0.3.0 — 2026-11-23
+
+### 新增
+
+- **技术动态重做**：源从 4 个扩到 26 个，覆盖 Anthropic、Kimi / Moonshot、MiniMax、DeepSeek、OpenAI、Qwen、Google DeepMind、Meta AI、Mistral、xAI、Cohere、Hugging Face、Together AI、NVIDIA、Microsoft Research、MIT News、Apple ML、TensorFlow、AWS ML、Perplexity
+- **论文板块**：arXiv cs.CL / cs.LG 最新论文，外加「国产模型论文」「海外模型论文」两个按型号名检索的专题源，卡片自动标注机构
+- **官方列表页解析**：Anthropic、Kimi、MiniMax、DeepSeek 没有 RSS，改为解析官网列表页，只认路径前缀与像标题的文本，站点改版不易失效
+- **摘要补全**：列表页不给摘要时回访详情页取 `og:description` 或正文首段，并识别、丢弃站点通用描述
+- **厂商最新**：顶部固定展示 Anthropic / Kimi / MiniMax / DeepSeek / OpenAI / Qwen 各自最新一篇，优先挑技术类标题
+- **筛选与分页**：全部 / 博客 / 论文三段切换，来源 chips 带品牌色标与在线状态，列表默认 60 条可加载更多
+- **统计条**：总条目、官方博客、论文、来源在线四个数字一目了然
+
+### 稳健性
+
+- 每个源独立失败、独立重试；失败的源保留上次内容并标注「离线」，不清空
+- 增量合并按 URL 去重，缓存上限 1000 条，小源不会被大源挤掉
+- 抓取有硬预算（主源 13s + 海外 5s + 重试 6s），单个慢源不会把整次刷新拖到 40 秒以上
+- 列表页栏目主页（如 `/news/`）不会被误当成文章
+- 首页 HTML 实体、标题尾部日期、导航段落都会被清洗
+
+### 自检
+
+- 新增 4 项断言：官网列表页提取、论文机构识别、增量合并不丢内容、同日博客优先
+- 合计 75 项，全部通过
+
+---
+
 ## v0.2.3 — 2026-11-23
 
 ### 优化

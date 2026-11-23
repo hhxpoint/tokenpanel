@@ -294,6 +294,7 @@ class Handler(BaseHTTPRequestHandler):
                     "feeds": data.get("feeds", []),
                     "posts": data.get("posts", []),
                     "count": len(data.get("posts", [])),
+                    "stats": data.get("stats", {}),
                     "ttl": feeds.TTL_SEC,
                 })
             if path == "/api/heatmap":
@@ -332,6 +333,7 @@ class Handler(BaseHTTPRequestHandler):
                 "feeds": data.get("feeds", []),
                 "posts": data.get("posts", []),
                 "count": len(data.get("posts", [])),
+                "stats": data.get("stats", {}),
                 "ttl": feeds.TTL_SEC,
             })
         if parsed.path == "/api/heartbeat":
