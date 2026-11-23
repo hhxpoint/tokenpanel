@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Query
@@ -87,6 +87,39 @@ def overview(days: int = Query(7, ge=0, le=3650)) -> JSONResponse:
     return JSONResponse(d)
 
 
+def _heatmap(days: int = 365) -> dict:
+    """按本地日期返回连续 N 天的每日消耗，缺失日补 0。"""
+    days = max(7, min(days, 730))
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT date(ts/1000,'unixepoch','localtime') AS d,
+                      SUM(input + output + cache_read + cache_write) AS tokens
+               FROM usage_event GROUP BY d"""
+        ).fetchall()
+    totals = {r["d"]: (r["tokens"] or 0) for r in rows}
+
+    today = datetime.now().date()
+    start = today - timedelta(days=days - 1)
+    labels: list[str] = []
+    values: list[int] = []
+    cur = start
+    while cur <= today:
+        key = cur.isoformat()
+        labels.append(key)
+        values.append(int(totals.get(key, 0)))
+        cur += timedelta(days=1)
+
+    active = sum(1 for v in values if v > 0)
+    return {
+        "days": labels,
+        "values": values,
+        "active": active,
+        "peak": max(values) if values else 0,
+        "total": sum(values),
+        "span": days,
+    }
+
+
 @app.get("/api/trend")
 def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
     since = _since(days)
@@ -114,6 +147,11 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
             )
             series[c]["cost"].append(round(r["cost"] or 0, 4) if r else 0.0)
     return JSONResponse({"days": days_set, "series": series})
+
+
+@app.get("/api/heatmap")
+def heatmap(days: int = Query(365, ge=7, le=730)) -> JSONResponse:
+    return JSONResponse(_heatmap(days))
 
 
 @app.get("/api/models")

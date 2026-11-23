@@ -72,9 +72,20 @@ def _tokens(value) -> int:
 
 class Adapter:
     name = "base"
+    # 类级默认值：子类若重写 __init__ 且未调用 super()，也不会缺属性
+    progress = None
 
     def __init__(self, root: Path):
         self.root = Path(root)
+
+    def report(self, count: int) -> None:
+        """进度回调；任何异常都不能影响采集本身。"""
+        if self.progress is None:
+            return
+        try:
+            self.progress(count)
+        except Exception:
+            pass
 
     def available(self) -> bool:
         return self.root.exists()

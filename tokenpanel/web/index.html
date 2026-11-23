@@ -135,16 +135,65 @@
   th.sortable .ar{display:inline-block;width:9px;font-size:9px;opacity:.45}
   th.sortable.on .ar{opacity:1;color:var(--text-2)}
 
-  .scan-hint{
-    display:flex;align-items:center;gap:9px;
-    background:#eef4ff;border:1px solid #d7e3fb;color:#2c4a8a;
-    border-radius:10px;padding:9px 14px;font-size:12.5px;margin:6px 0 12px;
+  /* ---------- 扫描进度 ---------- */
+  .scan{
+    position:relative;overflow:hidden;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+    padding:13px 16px 14px 19px;margin:6px 0 12px;box-shadow:var(--shadow-sm);
+    animation:rise .32s var(--ease) both;
   }
-  .scan-hint .spin{
+  .scan[hidden]{display:none}
+  .scan::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--accent);transition:background .3s;
+  }
+  .scan.done::before{background:#3f9e6a}
+  .scan.fail::before{background:#c0392b}
+  .scan-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .scan-title{font-size:13px;font-weight:650;letter-spacing:-.2px}
+  .scan-cur{font-size:12px;color:var(--text-2);font-variant-numeric:tabular-nums}
+  .scan-time{margin-left:auto;font-size:12px;color:var(--muted);
+    font-variant-numeric:tabular-nums;letter-spacing:.2px}
+  .scan-percent{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .scan .spin{
     width:12px;height:12px;flex:none;border-radius:50%;
-    border:2px solid #b9cdf5;border-top-color:#3b6bd6;
+    border:2px solid #f0d4c6;border-top-color:var(--accent);
     animation:spin .8s linear infinite;
   }
+  .scan.done .spin,.scan.fail .spin{display:none}
+  .scan-track{height:4px;background:var(--surface-2);border-radius:99px;
+    overflow:hidden;margin:10px 0 9px}
+  .scan-track i{display:block;height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,#f0a173,var(--accent));
+    transition:width .45s var(--ease)}
+  .scan-src{display:flex;flex-wrap:wrap;gap:6px}
+  .sitem{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:99px;
+    padding:3px 9px;font-variant-numeric:tabular-nums;
+  }
+  .sitem .d{width:6px;height:6px;border-radius:50%;background:#c9c4bc;flex:none}
+  .sitem b{font-weight:600;opacity:.8}
+  .sitem.active{color:var(--text);border-color:#eec4b2;background:#fdf3ee}
+  .sitem.active .d{background:var(--accent);animation:pulse 1.1s ease-in-out infinite}
+  .sitem.done{color:var(--text-2)}
+  .sitem.done .d{background:#3f9e6a}
+  .sitem.partial .d{background:#d2902a}
+  .sitem.skipped{opacity:.6}
+  .sitem.error{color:#a8422a}
+  .sitem.error .d{background:#c0392b}
+  .scan-log{
+    margin-top:10px;padding-top:9px;border-top:1px dashed var(--border);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;
+    color:var(--muted);line-height:1.75;max-height:106px;overflow:auto;
+  }
+  .scan-log div{white-space:nowrap}
+  .scan-close{
+    border:0;background:transparent;color:var(--muted);cursor:pointer;
+    font:inherit;font-size:11.5px;padding:2px 4px;border-radius:5px;
+  }
+  .scan-close:hover{color:var(--text);background:var(--surface-2)}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.78)}}
 
   /* ---------- 总账条 ---------- */
   .ledger{
@@ -211,14 +260,30 @@
   .track i{transform-origin:left}
 
   /* ---------- 热力图 ---------- */
-  .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;justify-content:start}
-  .cell{width:11px;height:11px;border-radius:3px;background:#f2f0eb;
-    animation:pop .35s var(--ease) both}
+  .heatcard{--cs:10px;--gap:3px}
+  .heatlegend{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--muted)}
+  .heatlegend .cell{width:9px;height:9px;animation:none}
+  .heatwrap{margin-top:4px}
+  .heat-months{position:relative;height:15px;margin-left:23px;font-size:10px;color:var(--muted)}
+  .heat-months span{position:absolute;top:0;white-space:nowrap}
+  .heat-body{display:flex;gap:7px}
+  .heat-wd{
+    display:grid;grid-template-rows:repeat(7,var(--cs));gap:var(--gap);
+    width:16px;text-align:right;font-size:9.5px;color:var(--muted);
+  }
+  .heat-wd span{line-height:var(--cs)}
+  .heat{
+    display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--cs));
+    grid-auto-columns:var(--cs);gap:var(--gap);
+  }
+  .cell{width:var(--cs);height:var(--cs);border-radius:2.5px;background:#f2f0eb;
+    animation:pop .3s var(--ease) both}
   .cell:hover{outline:1.5px solid var(--text);outline-offset:1px}
+  .cell.blank{background:transparent;animation:none}
   .cell.l1{background:#f9dfd4}.cell.l2{background:#f2b79d}
   .cell.l3{background:#e2855f}.cell.l4{background:#c25a30}.cell.l5{background:#8f3713}
   @keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
-  .hstats{display:flex;gap:30px;margin-top:18px}
+  .hstats{display:flex;flex-wrap:wrap;gap:26px;margin-top:16px}
   .hstats .lb{font-size:11.5px;color:var(--muted)}
   .hstats .vl{font-size:17px;font-weight:650;letter-spacing:-.4px;margin-top:2px;
     font-variant-numeric:tabular-nums}
@@ -363,8 +428,18 @@
     </button>
   </header>
 
-  <div class="scan-hint" id="scanHint" hidden>
-    <span class="spin"></span><span class="txt">正在扫描本机数据…</span>
+  <div class="scan" id="scanPanel" hidden>
+    <div class="scan-top">
+      <span class="spin" id="scanSpin"></span>
+      <span class="scan-title" id="scanTitle">正在扫描本机数据</span>
+      <span class="scan-cur" id="scanCurrent">准备中…</span>
+      <span class="scan-percent" id="scanPercent"></span>
+      <span class="scan-time" id="scanElapsed">0.0s</span>
+      <button class="scan-close" id="scanClose" type="button" title="隐藏进度，扫描继续">隐藏</button>
+    </div>
+    <div class="scan-track"><i id="scanBar"></i></div>
+    <div class="scan-src" id="scanSources"></div>
+    <div class="scan-log" id="scanLog" hidden></div>
   </div>
 
   <section class="kpis" id="kpis" aria-label="汇总指标"></section>
@@ -385,14 +460,18 @@
   </div>
 
   <div class="grid rise d3">
-    <div class="card">
-      <div class="chead"><div><h3>近 90 天活跃度</h3><div class="hint">颜色越深，当日消耗越高</div></div></div>
-      <div class="legend" style="margin:0 0 12px">
-        <span>少</span><i class="cell l1" style="width:10px;height:10px"></i>
-        <i class="cell l3" style="width:10px;height:10px"></i>
-        <i class="cell l5" style="width:10px;height:10px"></i><span>多</span>
+    <div class="card heatcard" id="heatCard">
+      <div class="chead">
+        <div><h3>近 365 天活跃度</h3><div class="hint">每格一天 · 颜色越深消耗越高</div></div>
+        <div class="heatlegend">少<i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i><i class="cell l5"></i>多</div>
       </div>
-      <div class="heat" id="heat"></div>
+      <div class="heatwrap">
+        <div class="heat-months" id="heatMonths"></div>
+        <div class="heat-body">
+          <div class="heat-wd"><span></span><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span></div>
+          <div class="heat" id="heat"></div>
+        </div>
+      </div>
       <div class="hstats" id="heatStats"></div>
     </div>
     <div class="card">
@@ -715,48 +794,82 @@ function renderShare(o){
     </div>`;
 }
 
-function ymd(d){
-  const p = n => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-}
+function renderHeat(h){
+  const days = (h && h.days) || [];
+  const vals = (h && h.values) || [];
+  const grid = $("#heat");
+  if (!days.length){ grid.innerHTML = ""; return; }
+  state.heat = h;
 
-function renderHeat(t){
-  const days = t.days || [];
-  const map = {};
-  days.forEach(d => { map[d] = 0; });
-  Object.values(t.series).forEach(s=>{
-    s.tokens.forEach((v,i)=>{
-      const d = days[i];
-      if (d) map[d] = (map[d]||0) + v;
-    });
-  });
-  // 固定展示最近 91 天，按本地日期逐日推进
-  const now = new Date();
-  const span = 91, keys = [];
-  for (let i = span - 1; i >= 0; i--){
-    keys.push(ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)));
-  }
-  const vals = keys.map(k => map[k] || 0);
+  // 53 列自适应：按卡片可用宽度算格子尺寸，窄屏自动缩小
+  const card = $("#heatCard");
+  const avail = Math.max(230, card.clientWidth - 62);
+  const step = Math.max(6, Math.min(16, Math.floor(avail / 53)));
+  const gap = step >= 10 ? 3 : 2;
+  const cs = Math.max(4, step - gap);
+  card.style.setProperty("--cs", cs + "px");
+  card.style.setProperty("--gap", gap + "px");
+
   const max = Math.max(...vals, 1);
-  const q = [0.12,0.3,0.55,0.8].map(p=>max*p);
+  const q = [0.12, 0.3, 0.55, 0.8].map(p => max * p);
+  const level = v => {
+    if (!v) return 0;
+    let lv = 1;
+    if (v > q[0]) lv = 2;
+    if (v > q[1]) lv = 3;
+    if (v > q[2]) lv = 4;
+    if (v > q[3]) lv = 5;
+    return lv;
+  };
 
-  $("#heat").innerHTML = keys.map((k,i)=>{
-    const v = vals[i];
-    let lv = v>0 ? 1 : 0;
-    if (v>q[0]) lv=2; if (v>q[1]) lv=3; if (v>q[2]) lv=4; if (v>q[3]) lv=5;
-    const label = k.slice(5);
-    return `<div class="cell l${lv}" title="${label} · ${fmt(v)}"
-      style="animation-delay:${REDUCE?0:Math.min(.4, i*0.004)}s"></div>`;
-  }).join("");
+  // 首日是周几，决定第一列留几格空白，保证每列都是完整一周
+  const firstDow = new Date(days[0] + "T00:00:00").getDay();
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(`<div class="cell blank"></div>`);
+  days.forEach((k, i) => {
+    const v = vals[i] || 0;
+    const tip = v ? `${k} · ${fmt(v)} tokens` : `${k} · 无记录`;
+    cells.push(`<div class="cell l${level(v)}" title="${tip}"
+      style="animation-delay:${REDUCE ? 0 : (Math.min(0.5, i / 365 * 0.5)).toFixed(3)}s"></div>`);
+  });
+  while (cells.length % 7) cells.push(`<div class="cell blank"></div>`);
+  grid.innerHTML = cells.join("");
 
-  const active = vals.filter(v=>v>0);
+  // 月份标签：落在每月第一周的那一列
+  const months = [];
+  days.forEach((k, i) => {
+    const dt = new Date(k + "T00:00:00");
+    if (dt.getDate() <= 7) {
+      const col = Math.floor((i + firstDow) / 7);
+      const label = (dt.getMonth() + 1) + "月";
+      if (!months.length || months[months.length - 1].label !== label) {
+        if (!months.length || col - months[months.length - 1].col >= 2) {
+          months.push({ col, label });
+        }
+      }
+    }
+  });
+  const stride = step;
+  $("#heatMonths").innerHTML = months
+    .map(m => `<span style="left:${m.col * stride}px">${m.label}</span>`)
+    .join("");
+
+  // 统计
+  const activeDays = vals.filter(v => v > 0);
   const peak = Math.max(...vals, 0);
-  const avg = active.length ? active.reduce((a,b)=>a+b,0)/active.length : 0;
-  const stat = (label, value)=>`<div><div class="lb">${label}</div><div class="vl">${value}</div></div>`;
+  const avg = activeDays.length ? activeDays.reduce((a, b) => a + b, 0) / activeDays.length : 0;
+  let best = 0, run = 0;
+  vals.forEach(v => { if (v > 0){ run++; best = Math.max(best, run); } else run = 0; });
+  let cur = 0;
+  for (let i = vals.length - 1; i >= 0; i--){ if (vals[i] > 0) cur++; else break; }
+  const stat = (label, value, note) =>
+    `<div><div class="lb">${label}</div><div class="vl">${value}</div>${note ? `<div class="lb" style="margin-top:3px;opacity:.75">${note}</div>` : ""}</div>`;
+
   $("#heatStats").innerHTML =
-    stat("活跃天数（90 天）", `${active.length} / 90`) +
+    stat("活跃天数", `${activeDays.length} <span style="font-size:12px;color:var(--muted);font-weight:500">/ ${days.length}</span>`) +
     stat("日均（活跃日）", fmt(avg)) +
-    stat("单日峰值", fmt(peak));
+    stat("单日峰值", fmt(peak)) +
+    stat("最长连续", `${best} 天`, cur > 1 ? `当前连续 ${cur} 天` : "");
 }
 
 function renderModels(rows){
@@ -872,38 +985,128 @@ function renderHealth(h){
   $("#dbPath").textContent = "数据库 " + p.split("/").slice(-2).join("/");
 }
 
-/* ---------- 扫描状态跟随 ---------- */
-let scanPoll = null;
+/* ---------- 扫描进度 ---------- */
+let scanPoll = null;       // 轮询 /api/health
+let scanTick = null;       // 本地计时器
+let scanBase = 0;          // 计时基准（毫秒时间戳）
+let scanDismissed = false; // 用户手动隐藏
+let scanLastFinish = 0;    // 上一次完成时间，避免重复收尾
+let scanLastStart = 0;     // 本次扫描的起始时间，用于识别「新的一轮」
 
 function syncExport(days){
   const el = $("#exportBtn");
   if (el) el.href = `/api/export?days=${days}`;
 }
 
-function followScan(hl){
-  const hint = $("#scanHint");
-  const running = !!(hl.scan && hl.scan.running);
-  if (running){
-    hint.hidden = false;
-    if (!scanPoll) scanPoll = setInterval(checkScan, 2000);
-  } else {
-    hint.hidden = true;
-    if (scanPoll){ clearInterval(scanPoll); scanPoll = null; }
+function startScanPoll(){
+  if (!scanPoll) scanPoll = setInterval(pollScan, 900);
+}
+
+function stopScanPoll(){
+  if (scanPoll){ clearInterval(scanPoll); scanPoll = null; }
+  if (scanTick){ clearInterval(scanTick); scanTick = null; }
+}
+
+async function pollScan(){
+  try{
+    const h = await getJSON("/api/health");
+    applyScan(h.scan);
+  }catch(_){ /* 服务重启中，下一轮再试 */ }
+}
+
+function sourceMeta(x){
+  if (x.status === "active") return x.files ? `${x.files} 文件` : "读取中";
+  if (x.status === "pending") return "等待";
+  if (x.status === "skipped") return "跳过";
+  return `${x.files || 0} 文件 · ${fmt(x.events || 0)} 条`;
+}
+
+function renderSources(list){
+  $("#scanSources").innerHTML = (list || []).map(x =>
+    `<span class="sitem ${x.status}"><i class="d"></i>${esc(x.label)}<b>${sourceMeta(x)}</b></span>`
+  ).join("");
+}
+
+function applyScan(s){
+  if (!s) return;
+  const panel = $("#scanPanel");
+
+  // 新的一轮扫描开始：解除上次的「隐藏」
+  if (s.running && s.started && s.started !== scanLastStart){
+    scanLastStart = s.started;
+    scanDismissed = false;
+  }
+
+  if (s.running){
+    if (scanDismissed) { startScanPoll(); return; }
+    paintScan(s);
+    startScanPoll();
+    return;
+  }
+
+  // 结束态：只有「我们正在看」的时候才收尾，避免每次打开页面都弹一次
+  if (!panel.hidden && s.finished && s.finished !== scanLastFinish && s.phase !== "idle"){
+    finishScan(s);
   }
 }
 
-async function checkScan(){
-  try{
-    const h = await getJSON("/api/health");
-    if (!h.scan || !h.scan.running){
-      if (scanPoll){ clearInterval(scanPoll); scanPoll = null; }
-      $("#scanHint").hidden = true;
-      const added = (h.scan && h.scan.added) || 0;
-      toast(added > 0 ? `扫描完成，新增 ${added} 条记录` : "扫描完成");
-      load();
-    }
-  }catch(_){ /* 服务重启中，下一轮再试 */ }
+function paintScan(s){
+  const panel = $("#scanPanel");
+  panel.hidden = false;
+  panel.classList.remove("done", "fail");
+  $("#scanTitle").textContent = "正在扫描本机数据";
+  $("#scanBar").style.width = Math.max(3, s.percent || 0) + "%";
+  $("#scanPercent").textContent = s.total ? `${s.done || 0}/${s.total}` : "";
+  $("#scanCurrent").textContent = s.files
+    ? `已读 ${s.files} 个文件`
+    : "正在读取数据源…";
+
+  scanBase = Date.now() - (s.elapsed || 0) * 1000;
+  $("#scanElapsed").textContent = (s.elapsed || 0).toFixed(1) + "s";
+  if (!scanTick){
+    scanTick = setInterval(() => {
+      $("#scanElapsed").textContent = ((Date.now() - scanBase) / 1000).toFixed(1) + "s";
+    }, 100);
+  }
+
+  renderSources(s.sources);
+
+  // 当前数据源高亮提示，让人一眼看到「正在读哪个客户端」
+  const cur = (s.sources || []).find(x => x.key === s.current);
+  if (cur) $("#scanCurrent").textContent = `正在读取 ${cur.label}${s.files ? ` · ${s.files} 个文件` : ""}`;
+
+  const logs = (s.log || []).slice(-3);
+  const logEl = $("#scanLog");
+  logEl.hidden = !logs.length;
+  if (logs.length){
+    logEl.innerHTML = logs.map(l => `<div>${esc(l.text)}</div>`).join("");
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 }
+
+function finishScan(s){
+  scanLastFinish = s.finished;
+  stopScanPoll();
+  const panel = $("#scanPanel");
+  panel.hidden = false;
+  panel.classList.remove("done", "fail");
+  panel.classList.add(s.error ? "fail" : "done");
+  $("#scanTitle").textContent = s.error ? "扫描中断" : "扫描完成";
+  $("#scanCurrent").textContent = s.error
+    ? s.error
+    : `新增 ${s.added || 0} 条记录 · 正在刷新图表`;
+  $("#scanBar").style.width = "100%";
+  $("#scanPercent").textContent = s.total ? `${s.total}/${s.total}` : "";
+  $("#scanElapsed").textContent = (s.elapsed || 0).toFixed(1) + "s";
+  renderSources(s.sources);
+  setTimeout(() => { panel.hidden = true; }, s.error ? 8000 : 2600);
+  load();
+}
+
+$("#scanClose").addEventListener("click", () => {
+  scanDismissed = true;
+  $("#scanPanel").hidden = true;
+});
 
 function emptyState(msg){
   return `<div class="empty">${ICONS.empty}${esc(msg)}</div>`;
@@ -920,10 +1123,10 @@ async function load(){
   if (first) renderSkeleton();
 
   try{
-    const [ov, tr, tr90, md, pj, ss, cr, hl] = await Promise.all([
+    const [ov, tr, heat, md, pj, ss, cr, hl] = await Promise.all([
       getJSON(`/api/overview?days=${d}`),
       getJSON(`/api/trend?days=${d}`),
-      getJSON(`/api/trend?days=90`),
+      getJSON(`/api/heatmap?days=365`),
       getJSON(`/api/models?days=${d}`),
       getJSON(`/api/projects?days=${d}`),
       getJSON(`/api/sessions?days=${d}`),
@@ -932,9 +1135,9 @@ async function load(){
     ]);
     state.trendData = tr;
     renderKpis(ov); renderLedger(ov); renderTrend(tr); renderShare(ov);
-    renderHeat(tr90); renderModels(md); renderProjects(pj);
+    renderHeat(heat); renderModels(md); renderProjects(pj);
     renderSessions(ss); renderWB(cr); renderHealth(hl);
-    followScan(hl); syncExport(d);
+    applyScan(hl.scan); syncExport(d);
     $("#kpis").dataset.ready = "1";
     $("#builtTime").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN",{hour12:false});
   }catch(err){
@@ -1021,12 +1224,27 @@ $("#refresh").addEventListener("click", async e=>{
   const label = btn.lastChild;
   const prev = label.textContent;
   label.textContent = " 扫描中";
+
+  // 先把进度面板亮出来并发起轮询，再发请求：
+  // 请求本身是同步的，若等它返回，中间十几秒界面毫无反馈
+  scanDismissed = false;
+  scanLastFinish = 0;
+  $("#scanPanel").hidden = false;
+  $("#scanPanel").classList.remove("done", "fail");
+  $("#scanTitle").textContent = "正在扫描本机数据";
+  $("#scanCurrent").textContent = "准备数据源…";
+  $("#scanBar").style.width = "3%";
+  $("#scanPercent").textContent = "";
+  $("#scanSources").innerHTML = "";
+  $("#scanLog").hidden = true;
+  scanBase = Date.now();
+  startScanPoll();
+
   try{
     const r = await fetch("/api/scan", {method:"POST"});
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
-    const added = Object.values(data.sources||{}).reduce((s,v)=>s+(v.added||0),0);
-    toast(added > 0 ? `已扫描，新增 ${added} 条记录` : "已是最新，无新增记录");
+    if (data.status === "busy") toast("已有扫描在进行中");
   }catch(err){
     toast("扫描失败：" + err.message);
   }finally{
@@ -1041,6 +1259,15 @@ let lastHidden = 0;
 document.addEventListener("visibilitychange", ()=>{
   if (document.hidden){ lastHidden = Date.now(); }
   else if (Date.now() - lastHidden > 60000){ load(); }
+});
+
+/* 窗口尺寸变化：热力图格子数固定，重算尺寸避免挤压 */
+let heatResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(heatResizeTimer);
+  heatResizeTimer = setTimeout(() => {
+    if (state.heat) renderHeat(state.heat);
+  }, 160);
 });
 
 /* 心跳：让服务知道窗口还开着；关闭后服务会自动退出 */

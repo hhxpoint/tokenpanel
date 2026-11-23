@@ -115,9 +115,13 @@ def open_window(url: str, width: int = 1440, height: int = 940) -> bool:
 
 def _background_scan() -> None:
     try:
-        result = ingest.run()
+        # prepared=True：状态已在开窗前置位，避免二次重置导致进度闪回
+        result = ingest.run(prepared=True)
+        if result.get("status") == "busy":
+            runtime.scan_finished(0, "已有扫描在进行中")
+            print("已有扫描在进行中，跳过本次")
+            return
         added = sum(v.get("added", 0) for v in result["sources"].values())
-        runtime.scan_finished(added)
         print(f"扫描完成：新增 {added} 条，用时 {result['elapsed_ms']} ms")
     except Exception as exc:  # 后台扫描失败不影响面板使用
         runtime.scan_finished(0, str(exc))

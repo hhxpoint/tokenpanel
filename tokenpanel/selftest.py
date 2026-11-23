@@ -193,10 +193,39 @@ def test_runtime(r: Runner) -> None:
         st = runtime.scan_status()
         _assert(st["running"] is False and st["added"] == 7)
 
+    def progress_flow() -> None:
+        runtime.scan_started()
+        runtime.scan_plan([("a", "A"), ("b", "B")])
+        runtime.scan_enter("a")
+        runtime.scan_files(12)
+        st = runtime.scan_status()
+        _eq(st["total"], 2)
+        _eq(st["current"], "a")
+        _eq(st["files"], 12)
+        _eq(st["done"], 0)
+        runtime.scan_source_done("a", 12, 30, 5, 120)
+        runtime.scan_enter("b")
+        st = runtime.scan_status()
+        _eq(st["done"], 1)
+        _eq(st["percent"], 50)
+        runtime.scan_source_done("b", 3, 4, 0, 40)
+        st = runtime.scan_status()
+        _eq(st["done"], 2)
+        _eq(st["percent"], 100)
+
+    def stale_scan_resets() -> None:
+        runtime.scan_started()
+        runtime.SCAN["started"] = 0.0  # 模拟线程异常退出、时间戳停留在远古
+        st = runtime.scan_status()
+        _assert(st["running"] is False)
+        _assert("自动复位" in st["error"])
+
     r.check("无心跳不退出", no_beat_no_exit)
     r.check("心跳新鲜不退出", fresh_beat_stays)
     r.check("心跳过期退出", stale_beat_exits)
     r.check("扫描状态结构", scan_status_shape)
+    r.check("扫描进度流转", progress_flow)
+    r.check("扫描超时自愈", stale_scan_resets)
 
 
 def test_timezone_buckets(r: Runner) -> None:
@@ -305,7 +334,15 @@ def test_service(r: Runner) -> None:
     r.check("GET /api/overview", overview)
     r.check("GET /api/trend", trend)
     r.check("GET /api/version", version)
+    def heatmap() -> None:
+        d = json.loads(fetch("/api/heatmap?days=365"))
+        _eq(len(d["days"]), 365)
+        _eq(len(d["values"]), 365)
+        _assert(d["days"][-1] >= d["days"][0])
+        _assert(isinstance(d["active"], int))
+
     r.check("GET /api/export", export)
+    r.check("GET /api/heatmap 一年", heatmap)
 
 
 def test_recovery(r: Runner) -> None:

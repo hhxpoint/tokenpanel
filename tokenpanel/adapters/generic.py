@@ -193,6 +193,8 @@ class GenericAdapter(Adapter):
                 if time.time() > deadline or seen >= self.max_files:
                     break
                 seen += 1
+                if seen % 25 == 0:
+                    self.report(seen)
                 try:
                     stat = path.stat()
                     res.files += 1
@@ -204,6 +206,7 @@ class GenericAdapter(Adapter):
                     db.mark_file(conn, str(path), client, stat.st_mtime, stat.st_size, added)
                 except Exception as exc:
                     res.errors.append(f"{path.name}: {exc}")
+        self.report(seen)
         return res
 
     def _scan_file(self, path: Path, client: str, root: Path, res: ScanResult, deadline: float) -> int:

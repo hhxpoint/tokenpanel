@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -108,6 +108,42 @@ def _trend(days: int) -> dict:
         series[c] = item
     return {"days": days_set, "series": series}
 
+
+
+def _heatmap(days: int = 365) -> dict:
+    """按本地日期返回连续 N 天的每日消耗，缺失日补 0。
+
+    前端据此画「一年视角」的热力图，与所选时间范围解耦。
+    """
+    days = max(7, min(days, 730))
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT date(ts/1000,'unixepoch','localtime') AS d,
+                      SUM(input + output + cache_read + cache_write) AS tokens
+               FROM usage_event GROUP BY d"""
+        ).fetchall()
+    totals = {r["d"]: (r["tokens"] or 0) for r in rows}
+
+    today = datetime.now().date()
+    start = today - timedelta(days=days - 1)
+    labels: list[str] = []
+    values: list[int] = []
+    cur = start
+    while cur <= today:
+        key = cur.isoformat()
+        labels.append(key)
+        values.append(int(totals.get(key, 0)))
+        cur += timedelta(days=1)
+
+    active = sum(1 for v in values if v > 0)
+    return {
+        "days": labels,
+        "values": values,
+        "active": active,
+        "peak": max(values) if values else 0,
+        "total": sum(values),
+        "span": days,
+    }
 
 def _models(days: int) -> list:
     with db.session() as conn:
@@ -242,6 +278,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_sessions(int_q("days", 30), int_q("limit", 40)))
             if path == "/api/credits":
                 return self._json(_credits())
+            if path == "/api/heatmap":
+                return self._json(_heatmap(int_q("days", 365)))
             if path == "/api/health":
                 return self._json(_health())
             if path == "/api/version":
