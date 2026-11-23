@@ -44,7 +44,12 @@ def alert(text: str, title: str = APP_TITLE) -> None:
     try:
         import ctypes
 
-        ctypes.windll.user32.MessageBoxW(None, text, title, 0x10)
+        # 用 getattr 而不是 ctypes.windll：Linux/macOS 上没有这个属性，
+        # 直接写会在静态检查阶段报 attr-defined
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            raise RuntimeError("非 Windows 平台，退回控制台输出")
+        windll.user32.MessageBoxW(None, text, title, 0x10)
     except Exception:
         print(text)
 
