@@ -424,21 +424,21 @@
     font-size:10.5px;word-break:break-all}
   .disc-note{color:var(--muted);font-size:10.5px}
 
-  /* ---------- 光标光晕 ---------- */
-  .aurora{
-    position:fixed;left:0;top:0;width:520px;height:520px;border-radius:50%;
-    pointer-events:none;z-index:0;opacity:0;
-    background:radial-gradient(circle,
-      rgba(255,150,90,.20) 0%,
-      rgba(217,84,43,.10) 38%,
-      rgba(217,84,43,.035) 58%,
-      transparent 72%);
-    filter:blur(18px);
-    transition:opacity .7s var(--ease);
-    transform:translate3d(-9999px,-9999px,0);
-    will-change:transform;
+  /* ---------- 光标微光：细粒子 + 精微光环 ---------- */
+  .fx{
+    position:fixed;inset:0;pointer-events:none;z-index:45;
+    image-rendering:auto;
   }
-  .aurora.on{opacity:1}
+  /* 卡片内极弱的跟随高光，只发生在光标所在的那一张卡里 */
+  .card::after{
+    content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    opacity:0;transition:opacity .34s var(--ease);
+    background:radial-gradient(190px circle at var(--gx,50%) var(--gy,50%),
+      rgba(255,148,88,.075) 0%,
+      rgba(217,84,43,.028) 42%,
+      rgba(217,84,43,0) 70%);
+  }
+  .card:hover::after{opacity:1}
   .wrap{position:relative;z-index:1}
 
   /* ---------- 栏目切换 ---------- */
@@ -768,7 +768,7 @@
   </footer>
 </div>
 
-<div class="aurora" id="aurora" aria-hidden="true"></div>
+<canvas class="fx" id="fx" aria-hidden="true"></canvas>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1871,37 +1871,176 @@ $("#blogFeeds").addEventListener("click", e => {
 initViews();
 if (document.body.dataset.view !== "dash") switchView(document.body.dataset.view);
 
-/* 光标光晕：跟随指针的暖色柔光。减少动效或触屏设备时自动关闭 */
-(function aurora(){
-  const el = document.getElementById("aurora");
-  if (!el || REDUCE) return;
+/* 光标微光：极细的暖色粒子沿移动轨迹逸散，配一枚不刺眼的精微光环。
+   全程单 canvas 单 rAF，静止后自动停机；减少动效或触屏设备时整体关闭 */
+(function pointerFx(){
+  const cv = document.getElementById("fx");
+  if (!cv || REDUCE) return;
   if (window.matchMedia && window.matchMedia("(hover: none)").matches) return;
+  const ctx = cv.getContext("2d", {alpha: true});
+  if (!ctx) return;
 
-  const R = 260;                       // 半径，与 CSS 的 520px 对应
-  let tx = window.innerWidth * 0.5, ty = window.innerHeight * 0.28;
-  let cx = tx, cy = ty, raf = 0;
+  let W = 0, H = 0, dpr = 1, raf = 0, lastT = 0;
+  function resize(){
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.max(1, Math.round(W * dpr));
+    cv.height = Math.max(1, Math.round(H * dpr));
+    cv.style.width = W + "px"; cv.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener("resize", resize, {passive: true});
 
-  function tick(){
-    cx += (tx - cx) * 0.12;
-    cy += (ty - cy) * 0.12;
-    el.style.transform = `translate3d(${cx - R}px, ${cy - R}px, 0)`;
-    if (Math.abs(tx - cx) > 0.6 || Math.abs(ty - cy) > 0.6){
-      raf = requestAnimationFrame(tick);
-    } else {
-      raf = 0;
+  const MAX_PARTS = 160, MAX_PULSE = 5;
+  const parts = [], pulses = [];
+  let px = W * 0.5, py = H * 0.3;    // 指针真实位置
+  let rx = px, ry = py;              // 光环缓动位置
+  let lx = px, ly = py;              // 上次投放粒子的位置
+  let seen = 0;                      // 最近一次指针活动时刻
+  let ringA = 0, ringAim = 0;        // 光环透明度
+  let ringS = 1, ringSaim = 1;       // 光环尺度
+  const HOT = "a,button,input,textarea,select,[role=button],.chipbtn,.seg button,.tabs button";
+
+  function emit(x0, y0, x1, y1, dist){
+    const n = Math.min(10, Math.max(1, Math.round(dist / 4.6)));
+    for (let i = 1; i <= n; i++){
+      if (parts.length >= MAX_PARTS) parts.shift();
+      const t = i / n;
+      parts.push({
+        x: x0 + (x1 - x0) * t + (Math.random() - 0.5) * 4.5,
+        y: y0 + (y1 - y0) * t + (Math.random() - 0.5) * 4.5,
+        vx: (Math.random() - 0.5) * 0.15,
+        vy: -0.04 - Math.random() * 0.15,
+        r: 0.7 + Math.random() * 1.2,
+        age: 0, life: 680 + Math.random() * 620,
+        hue: 21 + Math.random() * 13,
+        ph: Math.random() * 6.283
+      });
     }
   }
 
+  function frame(t){
+    const dt = Math.min(48, lastT ? t - lastT : 16.7);
+    lastT = t;
+    const ease = 1 - Math.pow(1 - 0.19, dt / 16.7);
+    ctx.clearRect(0, 0, W, H);
+
+    /* 光环：低缓跟手，只有一层 1px 描边和极淡的内芯 */
+    rx += (px - rx) * ease;
+    ry += (py - ry) * ease;
+    ringA += (ringAim - ringA) * ease;
+    ringS += (ringSaim - ringS) * ease;
+
+    if (ringA > 0.004){
+      /* 三层结构，全部压到极淡：只有一圈 1px 外环 + 一圈内环 + 一个 1.3px 的光核，
+         不做实心填充，落在白底上也是一枚通透的细环而不是光团 */
+      const R = 9.5 * ringS * (1 + 0.055 * Math.sin(t * 0.0022));
+      const g = ctx.createRadialGradient(rx, ry, R * 0.2, rx, ry, R * 2.35);
+      g.addColorStop(0, "rgba(255,152,94," + (0.018 * ringA).toFixed(4) + ")");
+      g.addColorStop(0.55, "rgba(240,110,66," + (0.026 * ringA).toFixed(4) + ")");
+      g.addColorStop(1, "rgba(217,84,43,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(rx, ry, R * 2.35, 0, 6.2832); ctx.fill();
+
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(rx, ry, R, 0, 6.2832);
+      ctx.strokeStyle = "rgba(203,80,42," + (0.34 * ringA).toFixed(4) + ")";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rx, ry, R * 0.62, 0, 6.2832);
+      ctx.strokeStyle = "rgba(226,120,72," + (0.13 * ringA).toFixed(4) + ")";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rx - R * 0.16, ry - R * 0.2, 1.35, 0, 6.2832);
+      ctx.fillStyle = "rgba(255,186,136," + (0.66 * ringA).toFixed(4) + ")";
+      ctx.fill();
+    }
+
+    /* 粒子：越老越淡越小，上浮速度递减，像被空气托住。
+       统一一层 2px 的暖色微光，保证低 DPR 屏也能看清，又不至于糊成一片 */
+    const step = dt / 16.7;
+    ctx.shadowBlur = 2.8;
+    ctx.shadowColor = "rgba(255,146,86,.6)";
+    for (let i = parts.length - 1; i >= 0; i--){
+      const p = parts[i];
+      p.age += dt;
+      if (p.age >= p.life){ parts.splice(i, 1); continue; }
+      p.x += p.vx * step;
+      p.y += p.vy * step;
+      p.vy -= 0.0019 * step;
+      const life = 1 - p.age / p.life;
+      const flick = 0.84 + 0.16 * Math.sin(p.age * 0.021 + p.ph);
+      ctx.beginPath();
+      ctx.fillStyle = "hsla(" + p.hue.toFixed(0) + ",96%,60%," +
+        (0.55 * Math.pow(life, 1.7) * flick).toFixed(4) + ")";
+      ctx.arc(p.x, p.y, p.r * (0.55 + life * 0.65), 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    /* 点击涟漪：一圈极细的扩散环，不填充 */
+    for (let i = pulses.length - 1; i >= 0; i--){
+      const p = pulses[i];
+      p.age += dt;
+      const life = p.age / p.life;
+      if (life >= 1){ pulses.splice(i, 1); continue; }
+      const e = 1 - Math.pow(1 - life, 3);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5 + e * 42, 0, 6.2832);
+      ctx.lineWidth = Math.max(0.35, 1.15 * (1 - life));
+      ctx.strokeStyle = "rgba(206,78,40," + (0.19 * (1 - life)).toFixed(4) + ")";
+      ctx.stroke();
+    }
+
+    const calm = !parts.length && !pulses.length &&
+      Math.abs(px - rx) < 0.15 && Math.abs(py - ry) < 0.15 &&
+      Math.abs(ringAim - ringA) < 0.002 && Math.abs(ringSaim - ringS) < 0.002 &&
+      t - seen > 700;
+    if (calm){ raf = 0; lastT = 0; }
+    else raf = requestAnimationFrame(frame);
+  }
+
+  function wake(){
+    if (!raf){ lastT = 0; raf = requestAnimationFrame(frame); }
+  }
+
   window.addEventListener("pointermove", e => {
-    tx = e.clientX;
-    ty = e.clientY;
-    el.classList.add("on");
-    el.style.transform = `translate3d(${tx - R}px, ${ty - R}px, 0)`;
-    if (!raf) raf = requestAnimationFrame(tick);
+    const x = e.clientX, y = e.clientY;
+    const dx = x - lx, dy = y - ly, dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0.35) emit(lx, ly, x, y, dist);
+    lx = x; ly = y; px = x; py = y;
+    seen = performance.now();
+    ringAim = 1;
+
+    const tgt = e.target;
+    ringSaim = 1;
+    if (tgt && tgt.closest){
+      if (tgt.closest(HOT)) ringSaim = 1.5;
+      const card = tgt.closest(".card");
+      if (card){
+        const r = card.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0){
+          card.style.setProperty("--gx", ((x - r.left) / r.width * 100).toFixed(2) + "%");
+          card.style.setProperty("--gy", ((y - r.top) / r.height * 100).toFixed(2) + "%");
+        }
+      }
+    }
+    wake();
   }, {passive: true});
 
-  document.addEventListener("pointerleave", () => el.classList.remove("on"));
-  window.addEventListener("blur", () => el.classList.remove("on"));
+  document.addEventListener("pointerdown", e => {
+    pulses.push({x: e.clientX, y: e.clientY, age: 0, life: 600});
+    if (pulses.length > MAX_PULSE) pulses.shift();
+    wake();
+  }, {passive: true});
+
+  function fadeOut(){ ringAim = 0; ringSaim = 1; wake(); }
+  document.addEventListener("pointerleave", fadeOut);
+  window.addEventListener("blur", fadeOut);
 })();
 
 /* 心跳：让服务知道窗口还开着；关闭后服务会自动退出 */
