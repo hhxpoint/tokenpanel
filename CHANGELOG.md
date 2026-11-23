@@ -2,6 +2,36 @@
 
 遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## v0.4.0 — 2026-11-23
+
+这一版不加功能，只补「出问题时能不能定位」和「改代码时会不会踩坑」。
+
+### 新增
+
+- **本地日志**：`data/logs/tokenpanel.log`，2 MB 轮转保留 3 份，记录启动环境、抓取结果、扫描异常
+- **崩溃捕获**：接管 `sys.excepthook`、`threading.excepthook`、`sys.unraisablehook`，加 `faulthandler` 写 `crash.log`；`--windowed` 闪退也能留堆栈
+- **一键诊断包**：页脚「导出诊断」或 `python -m tokenpanel diagnostics`，打包版本、环境、库统计、日志尾部、表结构、扫描记录
+- **测试套件**：`tests/` 下 146 项 pytest，覆盖存储迁移、损坏隔离、计价匹配、聚合解析、五个内置适配器、服务端 11 个接口、日志钩子、诊断脱敏
+- **覆盖率门槛**：`--cov-fail-under` 70%，当前 72%
+- **静态检查**：ruff（E/F/W/I/UP/B/SIM/C4/PIE/RUF）与 mypy 全绿，写进 `pyproject.toml`
+- **CI 四段**：`lint` / `test`（Ubuntu 3.10/3.12/3.13 + Windows 3.12）/ `selftest`（三平台）/ `build`（打 tag 时构建并上传 exe）
+
+### 修复
+
+- **单源扫描异常会中断整次采集**：`ingest.run` 里 `adapter.scan` 抛异常直接冒到顶层，现在捕获、记录、标 `error` 后继续下一个源
+- **价格回算失败会让采集整体抛错**：已入库的数据白采，现在跳过并注明「下次自动补算」
+- **自检里两个同名 `test_discovery`**：后一个覆盖前一个，导致 7 项断言被静默丢弃，重命名后全部执行
+- **`/api/diagnostics` 缺导入**：mypy/ruff 的 F821 抓到的真实 bug
+- **遍历不跳过噪声目录**：`iter_files` 现在跳过 `.git`、`node_modules`、`__pycache__` 等
+- 列表页标题尾部日期、HTML 实体、导航段落、站点通用描述的清洗更严
+
+### 迁移
+
+- `PRAGMA user_version` 从无到 3：v2 补 `cost_src`，v3 建 `idx_credit_client`；旧库打开即升级，幂等
+- 早期试做留下的 `idx_usage_ts` / `idx_usage_client_ts` 重复索引会被自动清掉
+
+---
+
 ## v0.3.0 — 2026-11-23
 
 ### 新增

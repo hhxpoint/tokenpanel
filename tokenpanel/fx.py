@@ -16,17 +16,27 @@ import json
 import os
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict
 
 from . import config
 
 TTL_SEC = int(os.environ.get("TP_FX_TTL", 6 * 3600))
 SANITY_MIN, SANITY_MAX = 5.0, 9.0
+class Provider(TypedDict):
+    id: str
+    name: str
+    url: str
+    home: str
+    parse: Callable[[dict], tuple[float, str]]
+
+
 FALLBACK_RATE = 7.0         # 仅在两源皆失败且无缓存时使用
 _UA = "TokenPanel/0.1 (+https://github.com/hhxpoint/tokenpanel)"
 
 # 依次尝试；主源用市场价，备用源用 ECB 参考价
-PROVIDERS = [
+PROVIDERS: list[Provider] = [
     {
         "id": "er-api",
         "name": "open.er-api.com",

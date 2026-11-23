@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, db, discovery, pricing, runtime
+from . import config, db, discovery, logsetup, pricing, runtime
 from .adapters.base import Adapter
 from .adapters.claude import ClaudeAdapter
 from .adapters.codex import CodexAdapter
@@ -131,12 +131,33 @@ def _run_locked(
             adapter.progress = runtime.scan_files
             try:
                 result = adapter.scan(conn, force=force)
+            except Exception as exc:  # 单源崩溃不能拖垮整次扫描
+                logsetup.capture(exc, f"scan.{adapter.name}")
+                ms = int((time.time() - t0) * 1000)
+                runtime.scan_source_done(adapter.name, 0, 0, 0, ms, "error")
+                runtime.scan_note(f"{label}：扫描异常，已跳过（{type(exc).__name__}）")
+                summary[adapter.name] = {
+                    "status": "error",
+                    "reason": str(exc)[:200],
+                    "events": 0,
+                }
+                continue
             finally:
                 adapter.progress = None
 
-            added = db.upsert_events(conn, result.events)
-            credits = db.upsert_credits(conn, result.credits)
-            db.log_scan(conn, adapter.name, result.files, added, "; ".join(result.errors[:3]))
+            try:
+                added = db.upsert_events(conn, result.events)
+                credits = db.upsert_credits(conn, result.credits)
+                db.log_scan(conn, adapter.name, result.files, added, "; ".join(result.errors[:3]))
+            except Exception as exc:  # 写库失败同样只影响这一个源
+                logsetup.capture(exc, f"scan.write.{adapter.name}")
+                runtime.scan_note(f"{label}：写入失败，已跳过（{type(exc).__name__}）")
+                summary[adapter.name] = {
+                    "status": "error",
+                    "reason": str(exc)[:200],
+                    "events": len(result.events),
+                }
+                continue
             ms = int((time.time() - t0) * 1000)
             total_added += added
 
@@ -165,7 +186,12 @@ def _run_locked(
         runtime.scan_note("按价格表回算成本…")
         # 始终按当前价格表重算：价格表更新后无需用户额外操作即可生效
         # pricing.recalc 内部会跳过 cost_src='native' 的记录
-        priced = pricing.recalc(conn)
+        try:
+            priced = pricing.recalc(conn)
+        except Exception as exc:  # 回算失败不该让已经入库的数据白采
+            logsetup.capture(exc, "pricing.recalc")
+            runtime.scan_note("价格回算失败，已跳过；下次扫描会自动补算")
+            priced = 0
 
     runtime.scan_note(f"完成：共新增 {total_added} 条")
     runtime.scan_finished(total_added)

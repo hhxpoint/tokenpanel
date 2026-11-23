@@ -193,7 +193,8 @@ python -m tokenpanel scan               # 增量采集
 python -m tokenpanel scan --force --recalc    # 全量重扫 + 按新价格重算
 python -m tokenpanel report --days 30   # 终端报表
 python -m tokenpanel doctor             # 环境体检
-python -m tokenpanel selftest           # 内建自检（28 项）
+python -m tokenpanel selftest           # 内建自检（74 项）
+python -m tokenpanel diagnostics --out d.zip   # 导出诊断包
 python -m tokenpanel desktop            # 桌面窗口
 python -m tokenpanel serve --port 8765  # 仅启动网页服务
 ```
@@ -214,13 +215,66 @@ Codex             2     6285      378    1.42万        0    2.09万          -
 ```
 
 
+## 出问题了怎么排查
+
+打包版没有控制台，崩溃时不会留下任何提示。所以程序会把运行日志写在
+`data/logs/tokenpanel.log`（2 MB 轮转，保留 3 份），并用三个钩子兜住异常：
+
+- `sys.excepthook`：主线程未捕获异常
+- `threading.excepthook`：子线程未捕获异常
+- `sys.unraisablehook`：析构等场景里无法抛出的异常
+- `faulthandler`：段错误、栈溢出这类原生崩溃写进 `data/logs/crash.log`
+
+面板页脚有「导出诊断」。它打一个 zip，包含：
+
+| 文件 | 内容 |
+| --- | --- |
+| `summary.json` | 版本、Python、系统、路径、库统计、各源最近状态 |
+| `logs/tail.log` | 最近 600 行运行日志 |
+| `logs/crash.log` | 原生崩溃记录（如果有） |
+| `schema.txt` | 数据库表结构 |
+| `scan_log.txt` | 最近 30 次扫描的摘要与错误 |
+
+**不含**任何 token 明细、会话内容或提示词，只给计数与时间范围。环境变量里
+名字带 key / token / secret 的一律打成 `***`。可以直接把这个 zip 发给维护者。
+
+命令行等价写法：
+
+```bash
+python -m tokenpanel diagnostics --out tokenpanel-diag.zip
+```
+
+## 开发与测试
+
+```bash
+python -m pip install -r requirements.txt -r requirements-dev.txt
+
+python -m pytest                          # 146 项单元/集成测试
+python -m pytest --cov=tokenpanel         # 覆盖率，低于 70% 直接失败
+python -m ruff check tokenpanel tests launch.py
+python -m mypy tokenpanel
+python -m tokenpanel selftest             # 端到端自检，含本地服务
+```
+
+测试全部在临时目录里跑（`app_home` fixture 把 `DATA_DIR` / `DB_PATH` / 价格表
+整体搬走），不会碰到你真实的 `data/`。需要联网的抓取一律 monkeypatch，
+CI 里也不访问外网。
+
+CI 分四个 job：`lint`（ruff + mypy）、`test`（Ubuntu 3.10/3.12/3.13 + Windows
+3.12，带覆盖率门槛）、`selftest`（三平台端到端）、`build`（打 tag 时构建 exe
+并上传产物）。
+
+数据库结构用 `PRAGMA user_version` 管理，当前 v3。旧库打开时按版本逐级补列与
+索引，幂等且不丢数据；损坏的库会被改名成 `*.corrupt-时间戳.db` 保留，而不是
+直接删掉。
+
 ## 代码签名策略（Code signing policy）
 
 本项目所有发布产物遵循以下规则：
 
 - 只发布从本仓库源码构建的二进制，不接受第三方提交的可执行文件
 - 每个 Release 附带 `SHA256SUMS.txt`，校验值必须与上传资产一致
-- 发布前必须通过 `python -m tokenpanel selftest`（49 项断言）与 CI 三平台矩阵
+- 发布前必须通过 `pytest`（146 项）、`ruff`、`mypy`、`selftest`（74 项断言）与 CI 四平台矩阵
 - 如获得代码签名证书，将对全部可执行文件统一签名并附加可信时间戳
 - 每次签名请求由仓库维护者本人确认，不做无人值守的自动签名
 

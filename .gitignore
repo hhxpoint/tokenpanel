@@ -22,3 +22,11 @@ Thumbs.db
 # 本地调试产物
 _*.html
 _*.png
+
+# 测试与覆盖率产物
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/

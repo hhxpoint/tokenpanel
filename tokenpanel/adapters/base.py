@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".cache"}
 
 
 def iter_files(
@@ -30,7 +33,9 @@ def iter_files(
     而 os.walk 可以通过 onerror 忽略并继续，3.10 与 3.13 行为一致。
     """
     count = 0
-    for dirpath, _dirnames, names in os.walk(root, onerror=lambda _e: None):
+    for dirpath, dirnames, names in os.walk(root, onerror=lambda _e: None):
+        # 这些目录里不可能放会话记录，跳过能省下大量无谓遍历
+        dirnames[:] = [d for d in dirnames if d.lower() not in SKIP_DIRS]
         for name in names:
             if prefix and not name.startswith(prefix):
                 continue
@@ -49,7 +54,7 @@ class ScanResult:
     files: int = 0
     errors: list[str] = field(default_factory=list)
 
-    def merge(self, other: "ScanResult") -> None:
+    def merge(self, other: ScanResult) -> None:
         self.events.extend(other.events)
         self.credits.extend(other.credits)
         self.files += other.files
@@ -73,7 +78,7 @@ def _tokens(value) -> int:
 class Adapter:
     name = "base"
     # 类级默认值：子类若重写 __init__ 且未调用 super()，也不会缺属性
-    progress = None
+    progress: Callable[[int], None] | None = None
 
     def __init__(self, root: Path):
         self.root = Path(root)

@@ -1,6 +1,6 @@
 [project]
 name = "tokenpanel"
-version = "0.3.0"
+version = "0.4.0"
 description = "自动检索本机 AI 客户端并量化全部 token 用量的本地面板"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,3 +29,52 @@ include = ["tokenpanel*"]
 
 [tool.setuptools.package-data]
 tokenpanel = ["web/*.html"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+exclude = ["build", "dist", "data", "docs"]
+
+[tool.ruff.lint]
+# 刻意不启用 BLE001 / S110：这个项目里「吞掉异常并继续」是设计的一部分
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PIE", "RUF"]
+ignore = [
+    "E501",     # 长注释与 URL 不强行折行
+    "RUF001",   # 中文标点
+    "RUF002",
+    "RUF003",
+    "SIM105",   # try/except/pass 在容错分支里比 contextlib.suppress 更好读
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tokenpanel/selftest.py" = ["B011"]
+"tests/*" = ["SIM117"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = ["build/", "dist/", "docs/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+]
+
+[tool.coverage.run]
+source = ["tokenpanel"]
+omit = [
+    "tokenpanel/web/*",
+    "tokenpanel/selftest.py",
+    "tokenpanel/server.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 70

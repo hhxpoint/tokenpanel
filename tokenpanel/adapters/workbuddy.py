@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 
 from .. import db
 from .base import Adapter, ScanResult, short_project, to_ms

@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from .. import config, db
-from .base import Adapter, ScanResult, parse_iso_ms, short_project, to_ms
+from .base import Adapter, ScanResult, short_project, to_ms
 
 try:
     import zstandard as zstd

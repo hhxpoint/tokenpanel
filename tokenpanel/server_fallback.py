@@ -10,10 +10,25 @@ import json
 import time
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, catalog, config, db, discovery, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
+from . import (
+    __version__,
+    catalog,
+    config,
+    db,
+    diagnostics,
+    discovery,
+    doctor,
+    exporter,
+    feeds,
+    fx,
+    ingest,
+    logsetup,
+    pricing,
+    runtime,
+    updater,
+)
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
@@ -95,9 +110,9 @@ def _trend(days: int) -> dict:
     days_set = sorted({r["day"] for r in rows})
     clients = sorted({r["client"] for r in rows})
     index = {(r["client"], r["day"]): r for r in rows}
-    series = {}
+    series: dict[str, dict[str, list[float]]] = {}
     for c in clients:
-        item = {"tokens": [], "cost": []}
+        item: dict[str, list[float]] = {"tokens": [], "cost": []}
         for day in days_set:
             r = index.get((c, day))
             item["tokens"].append(
@@ -251,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, data) -> None:
         self._send(200, json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         q = parse_qs(parsed.query)
@@ -305,6 +320,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(updater.version_info())
             if path == "/api/update":
                 return self._json(updater.check())
+            if path == "/api/diagnostics":
+                body = diagnostics.build_zip()
+                return self._send(
+                    200, body, "application/zip",
+                    {"Content-Disposition": f'attachment; filename="{diagnostics.default_name()}"'},
+                )
             if path == "/api/export":
                 days = int_q("days", 30)
                 try:
@@ -319,14 +340,16 @@ class Handler(BaseHTTPRequestHandler):
                 )
             self._send(404, b'{"error":"not found"}')
         except Exception as exc:  # 服务不因单请求异常退出
+            logsetup.capture(exc, f"GET {self.path}")
             self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/blogs/refresh":
             try:
                 data = feeds.refresh(force=True)
             except Exception as exc:
+                logsetup.capture(exc, f"POST {self.path}")
                 return self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"))
             return self._json({
                 "fetched_at": data.get("fetched_at", 0),
@@ -380,7 +403,7 @@ def serve(port: int = 8765, watch: bool = False, quiet: bool = False) -> None:
         if not quiet:
             print(f"端口 {port} 无法绑定：{exc}")
             print(f"可能已有实例在运行；如需换端口：python -m tokenpanel serve --port {port + 1}")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
     if watch:
         threading.Thread(target=_watchdog, daemon=True).start()
     if not quiet:

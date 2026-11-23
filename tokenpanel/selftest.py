@@ -74,7 +74,7 @@ def test_pricing(r: Runner) -> None:
     r.check("未定价成本为 None", lambda: _eq(pricing.cost_of("totally-unknown", 10, 10, 0, 0), None))
     r.check(
         "成本计算正确",
-        lambda: _assert(abs(pricing.cost_of("deepseek-flash", 1_000_000, 0, 0, 0) - 0.30) < 1e-9),
+        lambda: _assert(abs((pricing.cost_of("deepseek-flash", 1_000_000, 0, 0, 0) or 0) - 0.30) < 1e-9),
     )
 
     def longest_match() -> None:
@@ -118,7 +118,7 @@ def test_generic_finder(r: Runner) -> None:
     )
 
 
-def test_discovery(r: Runner) -> None:
+def test_discovery_hints(r: Runner) -> None:
     from . import discovery
 
     r.check("识别 copilot 扩展名", lambda: _eq(discovery._match_hint("github.copilot-chat"), "copilot"))
@@ -317,8 +317,8 @@ def test_fx(r: Runner) -> None:
     from . import fx
 
     def convert_math() -> None:
-        _assert(abs(fx.convert(1, "USD", "CNY", 7.0) - 7.0) < 1e-9)
-        _assert(abs(fx.convert(7, "CNY", "USD", 7.0) - 1.0) < 1e-9)
+        _assert(abs((fx.convert(1, "USD", "CNY", 7.0) or 0) - 7.0) < 1e-9)
+        _assert(abs((fx.convert(7, "CNY", "USD", 7.0) or 0) - 1.0) < 1e-9)
         _eq(fx.convert(1, "USD", "USD", 7.0), 1.0)
         _eq(fx.convert(None, "USD", "CNY", 7.0), None)
 
@@ -590,7 +590,6 @@ def test_recovery(r: Runner) -> None:
     from . import config
 
     def corrupt_heals() -> None:
-        import sqlite3
         import tempfile
 
         bad = Path(tempfile.mkdtemp()) / "bad.db"
@@ -644,8 +643,8 @@ def test_updater(r: Runner) -> None:
 
 
 def test_limits(r: Runner) -> None:
-    from .exporter import export_csv
     from .adapters.base import _tokens
+    from .exporter import export_csv
 
     def clamp() -> None:
         _eq(_tokens(-5), 0)
@@ -657,6 +656,7 @@ def test_limits(r: Runner) -> None:
         # 用临时库，避免依赖本机真实数据（CI 上是空库）
         import tempfile
         import time as _t
+
         from tokenpanel import config as cfg
 
         tmp = Path(tempfile.mkdtemp()) / "cap.db"
@@ -708,7 +708,7 @@ def main() -> int:
     print("[通用探测器]")
     test_generic_finder(r)
     print("[环境发现]")
-    test_discovery(r)
+    test_discovery_hints(r)
     print("[存储语义]")
     test_db(r)
     print("[边界算法]")

@@ -4,17 +4,39 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import __version__, catalog, config, db, discovery, doctor, exporter, feeds, fx, ingest, pricing, runtime, updater
+from . import (
+    __version__,
+    catalog,
+    config,
+    db,
+    diagnostics,
+    discovery,
+    doctor,
+    exporter,
+    feeds,
+    fx,
+    ingest,
+    logsetup,
+    pricing,
+    runtime,
+    updater,
+)
 
 WEB_DIR = config.WEB_DIR
 DAY_MS = 86_400_000
 
 app = FastAPI(title="TokenPanel", docs_url=None, redoc_url=None)
+
+
+@app.exception_handler(Exception)
+async def _unhandled(request, exc):
+    """任何未单独捕获的异常都留下堆栈，同时保持接口返回结构一致。"""
+    logsetup.capture(exc, f"{request.method} {request.url.path}")
+    return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 def _since(days: int) -> int:
@@ -137,7 +159,7 @@ def trend(days: int = Query(30, ge=0, le=3650)) -> JSONResponse:
     days_set = sorted({r["day"] for r in rows})
     clients = sorted({r["client"] for r in rows})
     index = {(r["client"], r["day"]): r for r in rows}
-    series = {c: {"tokens": [], "cost": []} for c in clients}
+    series: dict[str, dict[str, list[float]]] = {c: {"tokens": [], "cost": []} for c in clients}
     for c in clients:
         for day in days_set:
             r = index.get((c, day))
@@ -191,6 +213,17 @@ def blogs_refresh() -> JSONResponse:
         "stats": data.get("stats", {}),
         "ttl": feeds.TTL_SEC,
     })
+
+
+@app.get("/api/diagnostics")
+def diagnostics_zip() -> Response:
+    return Response(
+        content=diagnostics.build_zip(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{diagnostics.default_name()}"',
+        },
+    )
 
 
 @app.get("/api/heatmap")

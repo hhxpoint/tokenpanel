@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from . import config
 
@@ -105,8 +105,10 @@ def quarantine(target: Path) -> Path | None:
     if not target.exists():
         return None
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    dest = target.with_name(f"{target.stem}.corrupt-{stamp}{target.suffix}")
+    dest: Path | None = target.with_name(f"{target.stem}.corrupt-{stamp}{target.suffix}")
     try:
+        if dest is None:
+            return None
         target.rename(dest)
     except OSError:
         try:
@@ -124,11 +126,40 @@ def quarantine(target: Path) -> Path | None:
     return dest
 
 
+SCHEMA_VERSION = 3
+
+
+def schema_version(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
-    """轻量迁移：给旧库补列，避免用户需要删库重扫。"""
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(usage_event)")}
-    if "cost_src" not in cols:
-        conn.execute("ALTER TABLE usage_event ADD COLUMN cost_src TEXT")
+    """按 `PRAGMA user_version` 逐级升级，避免用户删库重扫。
+
+    v1：初始四张表（由 SCHEMA 的 CREATE IF NOT EXISTS 保证）
+    v2：usage_event 补 cost_src，区分「原生成本」与「按价格表回算」
+    v3：补查询索引，热力图与趋势不再全表扫
+
+    每一步都必须幂等：老库可能停在任意版本，也可能被手工改过。
+    """
+    version = schema_version(conn)
+
+    if version < 2:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(usage_event)")}
+        if "cost_src" not in cols:
+            conn.execute("ALTER TABLE usage_event ADD COLUMN cost_src TEXT")
+
+    if version < 3:
+        # (client, ts) 与 (ts) 已由初始 schema 建好，这里只补缺的那个，
+        # 顺手清掉早期试做时的重复索引
+        conn.execute("DROP INDEX IF EXISTS idx_usage_ts")
+        conn.execute("DROP INDEX IF EXISTS idx_usage_client_ts")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_credit_client ON credit_snapshot(client)")
+
+    if version != SCHEMA_VERSION:
+        # PRAGMA 不支持参数绑定，这里是整数常量
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.commit()
 
 
 @contextmanager

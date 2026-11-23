@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from datetime import datetime
 
-from . import config, db, ingest, pricing
-
+from . import config, db, ingest, logsetup, pricing
 
 DISPLAY = {
     "claude": "Claude Code",
@@ -39,7 +37,7 @@ def human(n: float | int | None) -> str:
     n = float(n or 0)
     a = abs(n)
     if a < 10_000:
-        return str(int(round(n)))
+        return str(round(n))
     if a < 100_000_000:
         v = n / 10_000
         return f"{v:.2f}万" if abs(v) < 100 else f"{v:.1f}万"
@@ -122,7 +120,7 @@ def cmd_report(args: argparse.Namespace) -> None:
         credits = db.credit_rows(conn)
         if credits:
             total_credit = sum((c["credits"] or 0) for c in credits)
-            print(f"\n=== 快照类（WorkBuddy，覆盖语义不可累加） ===")
+            print("\n=== 快照类（WorkBuddy，覆盖语义不可累加） ===")
             print(f"  会话数 {len(credits)}，credit 合计 {total_credit:,.1f}")
             for c in credits[:5]:
                 when = datetime.fromtimestamp((c["ts"] or 0) / 1000).strftime("%m-%d %H:%M")
@@ -165,6 +163,12 @@ def cmd_discover(args: argparse.Namespace) -> None:
     print(f"\n可量化 {len(s['supported'])} 个：{'、'.join(s['supported']) or '无'}")
     if s["detected_only"]:
         print(f"仅发现 {len(s['detected_only'])} 个：{'、'.join(s['detected_only'])}")
+
+
+def cmd_diagnostics(args: argparse.Namespace) -> None:
+    from . import diagnostics
+
+    raise SystemExit(diagnostics.main(["--out", args.out] if args.out else []))
 
 
 def cmd_doctor(args: argparse.Namespace) -> None:
@@ -220,13 +224,17 @@ def _force_utf8_console() -> None:
     """Windows 控制台默认不是 UTF-8，中文和 ✓ 符号会抛 UnicodeEncodeError。"""
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure:
+                reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
 
 
 def main(argv: list[str] | None = None) -> None:
     _force_utf8_console()
+    logsetup.setup()
+
     parser = argparse.ArgumentParser(prog="tokenpanel", description="AI 客户端 token 用量面板")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -242,6 +250,10 @@ def main(argv: list[str] | None = None) -> None:
     p_dis = sub.add_parser("discover", help="检索本机 AI 客户端 harness")
     p_dis.add_argument("--deep", action="store_true", help="同时统计目录体积（较慢）")
     p_dis.set_defaults(func=cmd_discover)
+
+    p_diag = sub.add_parser("diagnostics", help="导出诊断包")
+    p_diag.add_argument("--out", default="", help="输出路径")
+    p_diag.set_defaults(func=cmd_diagnostics)
 
     p_doc = sub.add_parser("doctor", help="环境体检")
     p_doc.add_argument("--quiet", action="store_true", help="只返回退出码")
@@ -262,4 +274,11 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
     config.ensure_dirs()
-    args.func(args)
+    logsetup.get("cli").info("执行命令：%s", args.cmd)
+    try:
+        args.func(args)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        logsetup.capture(exc, f"cli.{args.cmd}")
+        raise

@@ -20,7 +20,7 @@ import time
 import webbrowser
 from pathlib import Path
 
-from . import config, ingest, runtime
+from . import config, ingest, logsetup, runtime
 
 # PyInstaller 的 --windowed 模式下 stdout 为 None，任何 print 都会抛 AttributeError。
 # 这里兜底到 devnull，保证无控制台打包也能安全运行。
@@ -30,7 +30,9 @@ if sys.stderr is None:
     sys.stderr = sys.stdout
 for _stream in (sys.stdout, sys.stderr):
     try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+        reconfigure = getattr(_stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
@@ -133,6 +135,7 @@ def _background_scan() -> None:
         print(f"扫描完成：新增 {added} 条，用时 {result['elapsed_ms']} ms")
     except Exception as exc:  # 后台扫描失败不影响面板使用
         runtime.scan_finished(0, str(exc))
+        logsetup.capture(exc, "desktop.background_scan")
         print(f"扫描失败：{exc}")
 
 
@@ -145,15 +148,18 @@ def _watch_for_close() -> None:
     while True:
         time.sleep(5)
         if runtime.should_exit():
+            logsetup.get("desktop").info("窗口已关闭，进程退出")
             print("窗口已关闭，退出。")
             os._exit(0)
 
 
 def run(port: int = 8765, rescan: bool = True) -> None:
+    log = logsetup.get("desktop")
     config.ensure_dirs()
 
     ok, err = config.is_writable()
     if not ok:
+        log.error("数据目录不可写：%s（%s）", config.DATA_DIR, err)
         alert(
             "无法写入数据目录：\n"
             f"{config.DATA_DIR}\n\n"
@@ -166,6 +172,7 @@ def run(port: int = 8765, rescan: bool = True) -> None:
 
     if _port_open(port):
         # 已有实例在跑：打开窗口即可，本进程不必常驻
+        log.info("端口 %s 已有实例，直接开窗口", port)
         if not open_window(url):
             webbrowser.open(url)
         return
@@ -182,6 +189,7 @@ def run(port: int = 8765, rescan: bool = True) -> None:
     threading.Thread(target=_serve, daemon=True).start()
 
     if not _wait_port(port):
+        log.error("服务启动失败：端口 %s 12 秒内未就绪", port)
         print("服务启动失败，请检查端口是否被占用。")
         sys.exit(1)
 
@@ -191,6 +199,7 @@ def run(port: int = 8765, rescan: bool = True) -> None:
 
     # 先开窗口（页面显示骨架屏），扫描放到后台，避免用户干等
     if not open_window(url):
+        log.warning("未能以 app 模式打开窗口，改用默认浏览器")
         print(f"未找到可用的 Edge/Chrome，改用默认浏览器：{url}")
         opened = False
         try:

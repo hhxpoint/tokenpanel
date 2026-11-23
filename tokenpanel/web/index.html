@@ -814,7 +814,9 @@
     <span id="builtTime"></span>
     <span class="sep">·</span>
     <span class="ver"><span id="verLabel">v—</span>
-      <button class="linkbtn" id="checkUpdate" type="button">检查更新</button></span>
+      <button class="linkbtn" id="checkUpdate" type="button">检查更新</button>
+      <span class="sep">·</span>
+      <button class="linkbtn" id="diagBtn" type="button" title="打包版本、环境、日志与库统计，不含 token 明细">导出诊断</button></span>
   </footer>
 </div>
 
@@ -1570,6 +1572,12 @@ bindSeg("#modeSeg", "mode", b=>b.dataset.mode);
     document.querySelectorAll("#rangeSeg button").forEach(b => b.classList.toggle("on", Number(b.dataset.days) === days));
   }
 })();
+
+$("#diagBtn").addEventListener("click", () => {
+  // 走浏览器下载，后端已是 attachment
+  window.location.href = "/api/diagnostics";
+  toast("已生成诊断包（不含 token 明细）");
+});
 
 $("#checkUpdate").addEventListener("click", async e=>{
   const btn = e.currentTarget;

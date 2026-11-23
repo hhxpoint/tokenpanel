@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 HOME = Path.home()
@@ -110,12 +110,30 @@ USAGE_MARKERS = (
 )
 
 
+def _signal_in_file(path: Path, max_bytes: int = 300_000) -> tuple[bool, str]:
+    try:
+        if not path.name.lower().endswith(SESSION_SUFFIXES):
+            return False, ""
+        if path.stat().st_size > 200 * 1024 * 1024:
+            return False, ""
+        with path.open("rb") as fh:
+            chunk = fh.read(max_bytes).lower()
+    except OSError:
+        return False, ""
+    if any(marker in chunk for marker in USAGE_MARKERS):
+        return True, path.name
+    return False, ""
+
+
 def _has_usage_signal(path: Path, max_files: int = 4, max_bytes: int = 300_000) -> tuple[bool, str]:
     """读前几个 jsonl 文件的开头，确认里面真的写了 usage/token 字段。
 
     只看「有没有 jsonl」会把 Electron 缓存、网盘客户端全都算进来，
     必须看内容才能把误报压下去。
     """
+    if path.is_file():
+        return _signal_in_file(path)
+
     seen = 0
     for root, dirs, files in os.walk(path):
         dirs[:] = [d for d in dirs if d.lower() not in IGNORE_NAMES][:12]
@@ -199,7 +217,7 @@ def _dir_size_mb(path: Path, cap_files: int = 4000) -> float:
     total = 0
     seen = 0
     try:
-        for root, dirs, files in os.walk(path):
+        for root, _dirs, files in os.walk(path):
             for f in files:
                 try:
                     total += os.path.getsize(os.path.join(root, f))
@@ -321,20 +339,20 @@ def discover(deep: bool = False) -> list[Harness]:
     found: dict[str, Harness] = {}
 
     # 1. 已知位置
-    for client, path, kind, evidence in known_paths():
+    for known, path, kind, evidence in known_paths():
         if not path.exists():
             continue
-        if client in found:
+        if known in found:
             continue
-        found[client] = Harness(
-            client=client,
+        found[known] = Harness(
+            client=known,
             path=str(path),
-            supported=client in SUPPORTED,
+            supported=known in SUPPORTED,
             kind=kind,
             size_mb=_dir_size_mb(path) if deep else 0.0,
             evidence=evidence,
-            note="" if client in SUPPORTED else UNSUPPORTED_REASON.get(client, "暂无对应采集器"),
-            scannable=(client not in SUPPORTED and kind in ("jsonl_dir", "sqlite")),
+            note="" if known in SUPPORTED else UNSUPPORTED_REASON.get(known, "暂无对应采集器"),
+            scannable=(known not in SUPPORTED and kind in ("jsonl_dir", "sqlite")),
         )
 
     # 2. 一级目录扫描（HOME 下的点目录 + 各平台的应用数据根）
@@ -368,7 +386,7 @@ def discover(deep: bool = False) -> list[Harness]:
             if entry.name in IGNORE_NAMES or str(entry) in covered:
                 continue
 
-            client = _match_hint(entry.name)
+            client: str | None = _match_hint(entry.name)
             if client and client in found:
                 continue
 
@@ -380,7 +398,7 @@ def discover(deep: bool = False) -> list[Harness]:
                 # 这样新出现的客户端也能被发现，而不是必须等我写适配器
                 if kind == "sqlite" and "含 token 字段" in evidence:
                     # 通用探测器只读 jsonl，sqlite 需要专门适配器，这里只如实报告
-                    scannable = False
+                    pass
                 elif kind in ("unknown", "missing", "jsonl_dir"):
                     hit, ev = _looks_like_session_data(entry)
                     if not hit:

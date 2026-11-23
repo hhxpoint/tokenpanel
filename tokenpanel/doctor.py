@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import socket
 import sys
-from pathlib import Path
 
 from . import config
 
@@ -158,7 +157,7 @@ def run(quiet: bool = False) -> int:
         emit(OK if ok else WARN, name, detail)
 
     section("运行状态")
-    port_ok, port_detail, port_advice = _check_port()
+    _port_ok, port_detail, port_advice = _check_port()
     emit(OK, "端口", port_detail, port_advice)
     wr_ok, wr_detail, wr_advice = _check_writable()
     emit(OK if wr_ok else BAD, "数据目录", wr_detail, wr_advice, required=True)

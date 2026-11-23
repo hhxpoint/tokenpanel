@@ -22,7 +22,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from . import config
+from . import config, logsetup
 
 # ---------------------------------------------------------------------------
 # 源清单
@@ -273,8 +273,8 @@ def _parse_date(raw: str) -> float:
     if not raw:
         return 0.0
     try:
-        from email.utils import parsedate_to_datetime
         from datetime import timezone
+        from email.utils import parsedate_to_datetime
 
         dt = parsedate_to_datetime(raw)
         if dt is not None:
@@ -377,12 +377,10 @@ def parse_feed(xml_bytes: bytes, feed: dict) -> list[dict]:
                     link = href
                 elif not link:
                     link = _text(child)
-            elif name in ("description", "summary", "content"):
-                if not summary:
-                    summary = _text(child)
-            elif name in ("pubdate", "published", "updated", "date"):
-                if not published:
-                    published = _text(child)
+            elif name in ("description", "summary", "content") and not summary:
+                summary = _text(child)
+            elif name in ("pubdate", "published", "updated", "date") and not published:
+                published = _text(child)
 
         title = re.sub(r"\s+", " ", title).strip()
         if not title:
@@ -558,24 +556,32 @@ def _get(url: str, timeout: int, *, html: bool, tries: int = 2) -> bytes:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout, context=_CTX) as resp:
                 return resp.read(5 * 1024 * 1024)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last = exc
             if attempt + 1 < tries:
                 time.sleep(0.6 + attempt * 0.5)
     raise last  # type: ignore[misc]
 
 
+# 顺序即优先级：og 描述最能代表单篇文章，站点级的 name=description 常是全站通用文案
 _META_PATTERNS = (
-    r'<meta[^>]+(?:property|name)=["\'](?:og:description|twitter:description|description)["\'][^>]*content=["\']([^"\']*)["\']',
-    r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\'](?:og:description|twitter:description|description)["\']',
+    r'<meta[^>]+property=["\']og:description["\'][^>]*content=["\']([^"\']*)["\']',
+    r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*property=["\']og:description["\']',
+    r'<meta[^>]+name=["\']twitter:description["\'][^>]*content=["\']([^"\']*)["\']',
+    r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*name=["\']twitter:description["\']',
+    r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']*)["\']',
+    r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*name=["\']description["\']',
 )
 
 
 def _meta_desc(html: str) -> str:
     for pat in _META_PATTERNS:
         m = re.search(pat, html, re.I)
-        if m and len(m.group(1)) >= 30:
-            return _strip_html(htmllib.unescape(m.group(1)))
+        # 中文描述 20 来个字就足够说明问题，不能按英文长度卡 30
+        if m:
+            text = m.group(1).strip()
+            if len(text) >= 12:
+                return _strip_html(htmllib.unescape(text))
     return ""
 
 
@@ -613,7 +619,7 @@ def _run_tasks(tasks, fn, workers: int, budget: float) -> None:
         slots.acquire()
         try:
             fn(item)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         finally:
             slots.release()
@@ -662,9 +668,9 @@ def _enrich(posts: list[dict], site_descs: dict[str, str], budget: float = 6.0) 
 
 def _failed(feed: dict, error: str, started: float) -> dict:
     return {
-        "id": feed["id"],
-        "name": feed["name"],
-        "home": feed["home"],
+        "id": feed.get("id", "unknown"),
+        "name": feed.get("name", feed.get("id", "unknown")),
+        "home": feed.get("home", ""),
         "kind": feed.get("kind", "rss"),
         "paper": bool(feed.get("paper")),
         "optional": bool(feed.get("optional")),
@@ -701,7 +707,7 @@ def _run_batch(
         slots.acquire()
         try:
             res = _fetch_one(feed)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             res = _failed(feed, f"{type(exc).__name__}: {exc}", started)
         finally:
             slots.release()
@@ -734,7 +740,7 @@ def _fetch_one(feed: dict) -> dict:
     tries = 1
     try:
         site_desc = ""
-        if feed["kind"] == "html":
+        if feed.get("kind") == "html":
             raw = _get(feed["url"], timeout, html=True, tries=tries)
             html = raw.decode("utf-8", "replace")
             posts = extract_html(html, feed)
@@ -743,9 +749,9 @@ def _fetch_one(feed: dict) -> dict:
             raw = _get(feed["url"], timeout, html=False, tries=tries)
             posts = parse_feed(raw, feed)
         return {
-            "id": feed["id"],
-            "name": feed["name"],
-            "home": feed["home"],
+            "id": feed.get("id", "unknown"),
+            "name": feed.get("name", feed.get("id", "unknown")),
+            "home": feed.get("home", ""),
             "kind": feed.get("kind", "rss"),
             "paper": bool(feed.get("paper")),
             "optional": bool(feed.get("optional")),
@@ -757,11 +763,15 @@ def _fetch_one(feed: dict) -> dict:
             "ms": int((time.time() - started) * 1000),
             "error": "",
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logsetup.get("feeds").debug(
+            "源 %s 抓取失败（%s ms）：%s: %s",
+            feed["id"], int((time.time() - started) * 1000), type(exc).__name__, exc,
+        )
         return {
-            "id": feed["id"],
-            "name": feed["name"],
-            "home": feed["home"],
+            "id": feed.get("id", "unknown"),
+            "name": feed.get("name", feed.get("id", "unknown")),
+            "home": feed.get("home", ""),
             "kind": feed.get("kind", "rss"),
             "paper": bool(feed.get("paper")),
             "optional": bool(feed.get("optional")),
@@ -875,6 +885,7 @@ def _stats(posts: list[dict], feeds: list[dict]) -> dict:
 
 def refresh(force: bool = False) -> dict:
     """抓取所有源；非强制且缓存新鲜时直接返回缓存。"""
+    started_at = time.time()
     cached = load_cache()
     age = time.time() - float(cached.get("fetched_at") or 0)
     if not force and cached.get("posts") and age < TTL_SEC:
@@ -928,6 +939,15 @@ def refresh(force: bool = False) -> dict:
     feeds_out.sort(key=lambda f: (f["order"], not f["ok"]))
 
     posts = _merge(cached, fresh)
+    logsetup.get("feeds").info(
+        "技术动态抓取完成：%s 条（博客 %s / 论文 %s），%s/%s 个源在线，用时 %.1fs",
+        len(posts),
+        sum(1 for p in posts if p.get("kind") == "blog"),
+        sum(1 for p in posts if p.get("kind") == "paper"),
+        sum(1 for f in feeds_out if f.get("ok")),
+        len(feeds_out),
+        time.time() - started_at,
+    )
     data = {
         "fetched_at": time.time(),
         "feeds": feeds_out,
