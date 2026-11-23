@@ -405,6 +405,12 @@
   .price{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
   .price .cur{font-size:10.5px;color:var(--muted);margin-right:1px}
   .price.na{color:var(--muted);font-weight:400}
+  .alt{display:block;font-size:10.5px;color:var(--muted);font-weight:400;
+    margin-top:1px;letter-spacing:0;white-space:nowrap}
+  .fxnote{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+  .fxnote b{color:var(--text-2);font-weight:600}
+  .fxnote button{border:0;background:transparent;color:var(--accent);cursor:pointer;
+    font:inherit;font-size:11px;padding:0;text-decoration:underline;text-underline-offset:2px}
   .bdg{font-size:10.5px;padding:2px 7px;border-radius:5px;white-space:nowrap}
   .bdg.ok{background:#e9f6ee;color:#1b7a45}
   .bdg.pending{background:#fdf3e3;color:#8a5a12}
@@ -693,7 +699,7 @@ const REDUCE = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const state = { days:7, mode:"tokens", loading:false,
                 trendData:null, sessions:[], sortKey:"end_ts", sortDir:-1,
                 catalog:null, blogs:null,
-                priceQuery:"", priceProvider:"", priceCur:"", blogSource:"", blogAutoTried:false };
+                priceQuery:"", priceProvider:"", priceCur:"", blogSource:"", blogAutoTried:false, fx:null };
 
 const HIDDEN_KEY = "tokenpanel.hiddenClients";
 let hiddenClients = new Set();
@@ -827,7 +833,9 @@ function renderKpis(o){
     : "";
   const cards = [
     { icon:ICONS.db, label:"总" + (isCost ? "成本" : "Token"), val:main, raw:null,
-      sub:`${(o.calls||0).toLocaleString()} 次调用` + (prevTag ? " · 较上期 " + prevTag : "") },
+      sub:`${(o.calls||0).toLocaleString()} 次调用` + (prevTag ? " · 较上期 " + prevTag : "")
+        + (isCost && state.fx ? ` · <b>≈ ¥${(Number(o.cost) * Number(state.fx.usd_cny)).toFixed(2)}</b>` : "")
+        + (!isCost ? "" : "") },
     { icon:ICONS.bolt, label:"缓存命中率", val:cachePct + "%", raw:null,
       sub:`缓存读 <b>${fmt(o.cache_read)}</b> / 新输入 ${fmt(o.input)}` },
     { icon:ICONS.pulse, label:"平均有效 token / 次", val:fmt(avg), raw:avg,
@@ -1273,7 +1281,7 @@ async function load(){
   if (first) renderSkeleton();
 
   try{
-    const [ov, tr, heat, md, pj, ss, cr, hl] = await Promise.all([
+    const [ov, tr, heat, md, pj, ss, cr, hl, fxRate] = await Promise.all([
       getJSON(`/api/overview?days=${d}`),
       getJSON(`/api/trend?days=${d}`),
       getJSON(`/api/heatmap?days=365`),
@@ -1281,8 +1289,10 @@ async function load(){
       getJSON(`/api/projects?days=${d}`),
       getJSON(`/api/sessions?days=${d}`),
       getJSON(`/api/credits`),
-      getJSON(`/api/health`)
+      getJSON(`/api/health`),
+      getJSON("/api/fx").catch(() => null)
     ]);
+    if (fxRate) state.fx = fxRate;
     state.trendData = tr;
     renderKpis(ov); renderLedger(ov); renderTrend(tr); renderShare(ov);
     renderHeat(heat); renderModels(md); renderProjects(pj);
@@ -1317,6 +1327,21 @@ function bindSeg(id, key, parse){
 }
 bindSeg("#rangeSeg", "days", b=>Number(b.dataset.days));
 bindSeg("#modeSeg", "mode", b=>b.dataset.mode);
+
+/* 允许用 ?mode=cost&days=30 直接打开指定视图 */
+(function applyUrlParams(){
+  const q = new URLSearchParams(location.search);
+  const mode = q.get("mode");
+  if (mode === "cost" || mode === "tokens"){
+    state.mode = mode;
+    document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+  }
+  const days = Number(q.get("days"));
+  if (Number.isFinite(days) && days >= 0){
+    state.days = days;
+    document.querySelectorAll("#rangeSeg button").forEach(b => b.classList.toggle("on", Number(b.dataset.days) === days));
+  }
+})();
 
 $("#checkUpdate").addEventListener("click", async e=>{
   const btn = e.currentTarget;
@@ -1477,12 +1502,33 @@ function money(v, symbol){
   return `<span class="price"><span class="cur">${esc(symbol)}</span>${txt}</span>`;
 }
 
+/* 用最新汇率给出另一种货币的参考值（小字显示） */
+function altPrice(v, currency){
+  const rate = state.fx && Number(state.fx.usd_cny);
+  if (v === null || v === undefined || !rate) return "";
+  const isUSD = currency === "USD";
+  const conv = isUSD ? Number(v) * rate : Number(v) / rate;
+  const symbol = isUSD ? "¥" : "$";
+  let txt;
+  if (conv >= 1000) txt = conv.toFixed(0);
+  else if (conv >= 1) txt = conv.toFixed(2);
+  else if (conv >= 0.01) txt = conv.toFixed(3);
+  else txt = conv.toFixed(4);
+  txt = txt.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  return `<span class="alt">≈ ${symbol}${txt}</span>`;
+}
+
 /* ---------- 模型价格 ---------- */
 async function loadCatalog(){
   const body = $("#priceBody");
   body.innerHTML = `<tr><td colspan="8">${emptyState("正在读取价格表…")}</td></tr>`;
   try{
-    state.catalog = await getJSON("/api/catalog");
+    const [cat, rate] = await Promise.all([
+      getJSON("/api/catalog"),
+      getJSON("/api/fx").catch(() => null)
+    ]);
+    state.catalog = cat;
+    if (rate) state.fx = rate;
     renderCatalog();
   }catch(err){
     body.innerHTML = `<tr><td colspan="8">${emptyState("读取失败：" + err.message)}</td></tr>`;
@@ -1519,16 +1565,35 @@ function renderCatalog(){
       <td><span class="pname"><i class="dot" style="background:${colorOf(r.provider_id, 0)}"></i>${esc(r.provider)}</span></td>
       <td><div class="mid">${esc(r.model)}</div><div class="mono">${esc(r.model_id)}</div></td>
       <td class="mono">${esc(r.context)}</td>
-      <td class="num">${money(r.input, r.symbol)}</td>
-      <td class="num">${money(r.output, r.symbol)}</td>
-      <td class="num">${money(r.cache_read, r.symbol)}</td>
+      <td class="num">${money(r.input, r.symbol)}${altPrice(r.input, r.currency)}</td>
+      <td class="num">${money(r.output, r.symbol)}${altPrice(r.output, r.currency)}</td>
+      <td class="num">${money(r.cache_read, r.symbol)}${altPrice(r.cache_read, r.currency)}</td>
       <td>${badge}${note}</td>
       <td><a class="src" href="${esc(r.pricing_url)}" target="_blank" rel="noopener">官网</a></td>
     </tr>`;
   }).join("") : `<tr><td colspan="8">${emptyState("没有匹配的型号")}</td></tr>`;
 
   const meta = d.meta || {};
-  $("#priceNote").textContent = [meta.note, meta.updated ? `数据整理于 ${meta.updated}` : ""].filter(Boolean).join(" · ");
+  let fxLine = "";
+  if (state.fx){
+    const f = state.fx;
+    let when = "";
+    if (f.as_of){
+      const d = new Date(f.as_of);
+      when = isNaN(d.getTime())
+        ? esc(String(f.as_of))
+        : d.toLocaleString("zh-CN", {hour12:false});
+    } else if (f.fetched_at){
+      when = new Date(f.fetched_at * 1000).toLocaleString("zh-CN", {hour12:false});
+    }
+    const flag = f.fallback ? "（内置参考值）" : (f.stale ? "（本次未联网，沿用上次）" : "");
+    fxLine = `<span class="fxnote">汇率 1 USD = <b>${Number(f.usd_cny).toFixed(4)}</b> CNY · ${esc(f.source)}${flag}${when ? " · " + when : ""} <button id="fxRefresh" type="button">刷新汇率</button></span>`;
+  }
+  $("#priceNote").innerHTML = [
+    fxLine,
+    esc(meta.note || ""),
+    meta.updated ? `数据整理于 ${esc(meta.updated)}` : ""
+  ].filter(Boolean).join("<br>");
 }
 
 /* ---------- 技术动态 ---------- */
@@ -1582,6 +1647,20 @@ function renderBlogs(){
     </a>`;
   }).join("") : `<div class="bcard" style="grid-column:1/-1">${emptyState("还没有内容，点右上角「抓取最新」")}</div>`;
 }
+
+$("#priceNote").addEventListener("click", async e => {
+  if (e.target.id !== "fxRefresh") return;
+  e.target.disabled = true;
+  e.target.textContent = "刷新中…";
+  try{
+    const rate = await getJSON("/api/fx?refresh=true");
+    state.fx = rate;
+    renderCatalog();
+    toast(`汇率已更新：1 USD = ${Number(rate.usd_cny).toFixed(4)} CNY`);
+  }catch(err){
+    toast("汇率刷新失败：" + err.message);
+  }
+});
 
 $("#priceSearch").addEventListener("input", debounce(e => {
   state.priceQuery = e.target.value.trim();

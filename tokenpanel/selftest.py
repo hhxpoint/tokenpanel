@@ -257,6 +257,54 @@ def test_catalog(r: Runner) -> None:
     r.check("核实状态向下传递", verified_requires_provider)
 
 
+def test_fx(r: Runner) -> None:
+    from . import fx
+
+    def convert_math() -> None:
+        _assert(abs(fx.convert(1, "USD", "CNY", 7.0) - 7.0) < 1e-9)
+        _assert(abs(fx.convert(7, "CNY", "USD", 7.0) - 1.0) < 1e-9)
+        _eq(fx.convert(1, "USD", "USD", 7.0), 1.0)
+        _eq(fx.convert(None, "USD", "CNY", 7.0), None)
+
+    def sanity_range() -> None:
+        _assert(fx._valid(7.0) is True)
+        _assert(fx._valid(1.0) is False)
+        _assert(fx._valid(100.0) is False)
+
+    def env_override() -> None:
+        import os
+
+        os.environ["TP_USD_CNY"] = "7.25"
+        try:
+            d = fx.get()
+            _assert(abs(d["usd_cny"] - 7.25) < 1e-9)
+            _assert(d["fallback"] is False)
+        finally:
+            os.environ.pop("TP_USD_CNY", None)
+
+    def offline_uses_cache() -> None:
+        import json
+        import tempfile
+        from pathlib import Path as _Path
+
+        tmp = _Path(tempfile.mkdtemp()) / "fx.json"
+        tmp.write_text(json.dumps({"usd_cny": 6.9, "source": "cache", "fetched_at": 0}), encoding="utf-8")
+        real_fetch, real_path = fx._fetch, fx._path
+        fx._fetch = lambda: None
+        fx._path = lambda: tmp
+        try:
+            d = fx.get(force=True)
+        finally:
+            fx._fetch, fx._path = real_fetch, real_path
+        _assert(d["stale"] is True)
+        _assert(abs(d["usd_cny"] - 6.9) < 1e-9)
+
+    r.check("汇率换算", convert_math)
+    r.check("汇率区间校验", sanity_range)
+    r.check("环境变量覆盖", env_override)
+    r.check("断网沿用缓存", offline_uses_cache)
+
+
 def test_feeds(r: Runner) -> None:
     from . import feeds
 
@@ -424,7 +472,13 @@ def test_service(r: Runner) -> None:
 
     r.check("GET /api/heatmap 一年", heatmap)
     r.check("GET /api/catalog", catalog_api)
+    def fx_api() -> None:
+        d = json.loads(fetch("/api/fx"))
+        _assert(float(d["usd_cny"]) > 0)
+        _assert("source" in d and "stale" in d)
+
     r.check("GET /api/blogs", blogs_api)
+    r.check("GET /api/fx", fx_api)
 
 
 def test_recovery(r: Runner) -> None:
@@ -563,6 +617,7 @@ def main() -> int:
     test_recovery(r)
     print("[价格与动态]")
     test_catalog(r)
+    test_fx(r)
     test_feeds(r)
     print("[时区归日]")
     test_timezone_buckets(r)
