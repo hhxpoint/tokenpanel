@@ -105,6 +105,9 @@
   .card .ic svg{width:17px;height:17px}
   .card h3{margin:0 0 6px;font-size:14.5px;font-weight:650;letter-spacing:-.2px}
   .card p{margin:0;font-size:13.5px;color:var(--text2);line-height:1.65}
+  .card code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+    background:#f3f1ec;border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+    color:var(--text);white-space:nowrap}
 
   /* 步骤 */
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
@@ -120,6 +123,7 @@
     border:1px solid #f2e0b8;border-radius:12px;padding:15px 17px;font-size:13px;
     color:#845c14;line-height:1.65;margin-top:26px}
   .note svg{width:16px;height:16px;flex:none;margin-top:2px;opacity:.85}
+  .note a{color:inherit;text-decoration:underline;text-underline-offset:2px;font-weight:600}
   .note b{font-weight:650}
 
   /* 支持矩阵 */
@@ -194,7 +198,9 @@
         下载 Windows 版
       </a>
       <div class="meta" id="meta"><b>v0.1.3</b> · 10.3 MB · Windows 10/11 x64</div>
-      <div class="alt">或者 <a href="https://github.com/hhxpoint/tokenpanel/releases">查看全部版本</a></div>
+      <div class="alt">或者 <a href="https://github.com/hhxpoint/tokenpanel/releases">查看全部版本</a>
+        · <a id="shaLink" href="https://github.com/hhxpoint/tokenpanel/releases/latest/download/SHA256SUMS.txt">SHA256 校验值</a>
+        · <a href="https://github.com/hhxpoint/tokenpanel/blob/main/docs/signing.md">签名说明</a></div>
     </div>
 
     <div class="shot r r4">
@@ -249,12 +255,60 @@
       <div class="step"><div class="n">3</div><b>看数据</b><span>界面秒开，十几秒后数据自动补齐。</span></div>
     </div>
 
+  </section>
+
+  <section style="padding-top:0">
+    <div class="sec-head">
+      <h2>安全与完整性</h2>
+      <p>没有证书不等于无法验证——校验值比签名更能证明文件没被动过</p>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3 4.5 6v6c0 4.2 3.1 7.7 7.5 9 4.4-1.3 7.5-4.8 7.5-9V6L12 3Z"/>
+            <path d="M9.5 12.2 11.3 14l3.4-3.6"/>
+          </svg>
+        </div>
+        <h3>为什么会弹窗</h3>
+        <p>exe 没有代码签名，Windows 会提示「已保护你的电脑」。但要说明一点：<b>即使签名了，首次下载照样会弹</b>——EV 证书已不再绕过 SmartScreen，这是微软官方文档明确的现行规则。</p>
+      </div>
+
+      <div class="card">
+        <div class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h10M4 18h13"/>
+            <path d="m17.5 15.5 2.5 2.5 3-4"/>
+          </svg>
+        </div>
+        <h3>两分钟验证完整性</h3>
+        <p>把 <code>verify.bat</code> 和 exe 放在同一目录双击，自动比对 SHA256。哪怕被改了一个字节，结果都会不同。这是唯一能在你本地完成、不依赖任何第三方的验证。</p>
+      </div>
+
+      <div class="card">
+        <div class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="10" width="16" height="10" rx="2"/>
+            <path d="M8 10V7a4 4 0 0 1 7.5-2"/>
+            <path d="M12 14.5v2"/>
+          </svg>
+        </div>
+        <h3>去掉那一次拦截</h3>
+        <p>核对完哈希后，右键 exe → 属性 → 勾选「解除锁定」。这只是去掉「来自 Internet」的标记，不修改文件、不关闭任何安全功能。<b>顺序是先验证，再解除。</b></p>
+      </div>
+    </div>
+
     <div class="note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M12 9v5M12 17.5h.01"/>
         <path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>
       </svg>
-      <span><b>首次运行 Windows 可能提示「Windows 已保护你的电脑」</b>——这是因为 exe 没有做代码签名（个人项目无证书），不是文件本身有问题。点「更多信息」→「仍要运行」即可。</span>
+      <span><b>关于免费证书：</b>公开可信的代码签名证书自 2023 年起强制硬件密钥，已无免费渠道；两条免费的开放源码路径有硬门槛（
+        <a href="https://github.com/hhxpoint/tokenpanel/blob/main/docs/signing.md">详见签名说明</a>）。用自签名证书只会让警告变得更难看，所以本项目选择不做假签名，而是公开校验值。</span>
     </div>
   </section>
 
@@ -284,6 +338,7 @@
       <div>
         <a href="https://github.com/hhxpoint/tokenpanel">源码</a>
         <a href="https://github.com/hhxpoint/tokenpanel/releases">版本历史</a>
+        <a href="https://github.com/hhxpoint/tokenpanel/blob/main/docs/signing.md">Code signing policy</a>
         <a href="https://github.com/hhxpoint/tokenpanel/issues">反馈</a>
       </div>
       <div>MIT License · 数据只留在你自己的电脑上</div>

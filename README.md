@@ -22,9 +22,30 @@
 - 数据保存在 exe 同目录的 `data\` 下，整个文件夹可以拷到 U 盘带走
 - 系统要求：Windows 10/11 x64
 
-> **首次运行时 Windows 可能提示「Windows 已保护你的电脑」**
-> 这是因为 exe 没有做代码签名（个人项目无证书），不是文件本身有问题。
-> 点击「更多信息」→「仍要运行」即可。
+### 校验下载的文件
+
+每个 Release 都附带 `SHA256SUMS.txt` 和 `verify.bat`。把它们与 exe 放在同一目录，双击 `verify.bat` 即可自动比对：
+
+```
+  file     : ef30ff74568fd208ed0dcae2bcd6384406c03f2d50b03f1ae6f67f580dcec223
+  expected : ef30ff74568fd208ed0dcae2bcd6384406c03f2d50b03f1ae6f67f580dcec223
+  RESULT   : OK - matches the published checksum
+```
+
+手动校验：`Get-FileHash .\TokenPanel.exe -Algorithm SHA256`
+
+### 关于「Windows 已保护你的电脑」
+
+exe 没有做代码签名，首次运行会弹这个提示。需要说明的是：**即使签名了，首次下载照样会弹**——EV 证书自 2023 年起已不再绕过 SmartScreen，这是微软官方文档的现行规则，花钱买证书并不能解决这个问题。
+
+已经核对过校验值后，可以去掉那一次提示：
+
+1. 右键 `TokenPanel.exe` → **属性**
+2. 「常规」页底部勾选 **解除锁定 / Unblock** → 确定
+
+这只是去掉「来自 Internet」的标记（Mark-of-the-Web），不修改文件、不关闭任何安全功能。**请先校验哈希，再解除锁定。**
+
+完整说明（含免费签名方案的真实门槛）：[docs/signing.md](docs/signing.md)
 
 > 源码运行方式见下方「从源码运行」，适合想改代码或做二次开发的人。
 
@@ -189,6 +210,18 @@ Codex             2     6285      378    1.42万        0    2.09万          -
 总计 20.01亿 tokens：输入 1.59亿 · 输出 836.0万 · 缓存读 18.34亿 · 缓存写 21.31万 · 推理 68.05万
 ```
 
+
+## 代码签名策略（Code signing policy）
+
+本项目所有发布产物遵循以下规则：
+
+- 只发布从本仓库源码构建的二进制，不接受第三方提交的可执行文件
+- 每个 Release 附带 `SHA256SUMS.txt`，校验值必须与上传资产一致
+- 发布前必须通过 `python -m tokenpanel selftest`（49 项断言）与 CI 三平台矩阵
+- 如获得代码签名证书，将对全部可执行文件统一签名并附加可信时间戳
+- 每次签名请求由仓库维护者本人确认，不做无人值守的自动签名
+
+当前**未进行代码签名**，原因与替代验证方式见 [docs/signing.md](docs/signing.md)。
 
 ## 本地 API
 
